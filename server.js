@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const fetch = require("node-fetch");
@@ -8,6 +9,10 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+
+// 🔑 DIAGNÓSTICO DE KEYS (remova após confirmar que está funcionando)
+console.log("🔑 Claude key:", process.env.ANTHROPIC_API_KEY ? "OK ✅" : "UNDEFINED ❌");
+console.log("🔑 OpenAI key:", process.env.OPENAI_API_KEY ? "OK ✅" : "UNDEFINED ❌");
 
 // TESTE
 app.get("/", (req, res) => {
@@ -25,7 +30,7 @@ app.post("/generate-reel", async (req, res) => {
       });
     }
 
-    console.log("🚀 Gerando com OpenAI + Claude 3.5");
+    console.log("🚀 Gerando com OpenAI + Claude...");
 
     // 🟢 OPENAI
     const openaiPromise = fetch("https://api.openai.com/v1/chat/completions", {
@@ -48,9 +53,9 @@ app.post("/generate-reel", async (req, res) => {
           }
         ]
       })
-    }).then(res => res.json());
+    }).then(r => r.json());
 
-    // 🔵 CLAUDE (MODEL CORRETO)
+    // 🔵 CLAUDE
     const claudePromise = fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -59,7 +64,7 @@ app.post("/generate-reel", async (req, res) => {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-3-5-haiku-latest",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 300,
         messages: [
           {
@@ -68,13 +73,14 @@ app.post("/generate-reel", async (req, res) => {
           }
         ]
       })
-    }).then(res => res.json());
+    }).then(r => r.json());
 
-    // ⚡ pega o mais rápido
-    const result = await Promise.race([openaiPromise, claudePromise]);
+    // ⚡ Pega o mais rápido que responder com sucesso
+    const result = await Promise.any([openaiPromise, claudePromise]);
 
-    // 🧠 identifica quem respondeu
+    // 🧠 Identifica quem respondeu
     if (result.choices) {
+      console.log("✅ Respondeu: OpenAI");
       return res.json({
         success: true,
         provider: "openai",
@@ -83,6 +89,7 @@ app.post("/generate-reel", async (req, res) => {
     }
 
     if (result.content) {
+      console.log("✅ Respondeu: Claude");
       return res.json({
         success: true,
         provider: "claude",
@@ -90,16 +97,14 @@ app.post("/generate-reel", async (req, res) => {
       });
     }
 
-    console.log("❌ resposta inválida:", result);
-
+    console.log("❌ Resposta inválida:", result);
     return res.status(500).json({
       error: "Nenhum provider respondeu corretamente",
       raw: result
     });
 
   } catch (error) {
-    console.error("🚨 erro geral:", error);
-
+    console.error("🚨 Erro geral:", error);
     res.status(500).json({
       error: "Erro interno",
       details: error.message
