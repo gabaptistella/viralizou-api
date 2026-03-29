@@ -19,6 +19,82 @@ app.get("/", (req, res) => {
 // 🎯 GERAR REEL COM GPT
 app.post("/generate-reel", async (req, res) => {
   try {
+    const { topic, provider = "openai" } = req.body;
+
+    if (!topic) {
+      return res.status(400).json({
+        error: "Topic é obrigatório"
+      });
+    }
+
+    let roteiro = "";
+
+    // 🟢 OPENAI
+    if (provider === "openai") {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: "Você cria roteiros virais para Reels/TikTok com hooks fortes."
+            },
+            {
+              role: "user",
+              content: `Crie um roteiro viral curto sobre: ${topic}`
+            }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      roteiro = data.choices?.[0]?.message?.content;
+    }
+
+    // 🔵 CLAUDE
+    if (provider === "claude") {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: "claude-3-haiku-20240307",
+          max_tokens: 500,
+          messages: [
+            {
+              role: "user",
+              content: `Crie um roteiro viral curto para reels sobre: ${topic}`
+            }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      roteiro = data.content?.[0]?.text;
+    }
+
+    res.json({
+      success: true,
+      provider,
+      roteiro
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      error: "Erro interno",
+      details: error.message
+    });
+  }
+}); {
+  try {
     const { topic } = req.body;
 
     if (!topic) {
