@@ -23,6 +23,11 @@ app.post("/generate-reel", async (req, res) => {
     roteiro: `Teste funcionando sobre: ${topic}`
   });
 });
+app.post("/transcribe", (req, res) => {
+  res.json({
+    message: "Aqui vamos usar Whisper em breve 🔥"
+  });
+});
 
 app.listen(PORT, () => {
   console.log("Rodando na porta " + PORT);
