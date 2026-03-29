@@ -1,10 +1,13 @@
 {
   "name": "viralizou-backend",
   "version": "1.0.0",
-  "description": "API para gerar roteiros virais com OpenAI e Claude",
+  "description": "API para gerar roteiros virais",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "author": "",
   "license": "ISC",
