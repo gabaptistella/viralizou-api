@@ -13,7 +13,7 @@ app.get("/", (req, res) => {
   res.send("Viralizou backend rodando 🚀");
 });
 
-// 🎯 GERAR REEL
+// 🎯 GERAR REEL (OpenAI + Claude)
 app.post("/generate-reel", async (req, res) => {
   try {
     const { topic, provider = "openai" } = req.body;
@@ -50,7 +50,7 @@ app.post("/generate-reel", async (req, res) => {
       });
 
       const data = await response.json();
-      roteiro = data.choices?.[0]?.message?.content;
+      roteiro = data.choices?.[0]?.message?.content || "Erro no OpenAI";
     }
 
     // 🔵 CLAUDE
@@ -75,7 +75,9 @@ app.post("/generate-reel", async (req, res) => {
       });
 
       const data = await response.json();
-      roteiro = data.content?.[0]?.text;
+
+      // 🔥 FIX IMPORTANTE DO CLAUDE
+      roteiro = data?.content?.map(c => c.text).join("") || "Erro no Claude";
     }
 
     res.json({
