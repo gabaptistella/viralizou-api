@@ -14,7 +14,7 @@ app.get("/", (req, res) => {
   res.send("Viralizou backend rodando 🚀");
 });
 
-// 🔥 ENDPOINT PRINCIPAL
+// 🎯 GERAR REEL (OPENAI + CLAUDE PARALELO)
 app.post("/generate-reel", async (req, res) => {
   try {
     const { topic } = req.body;
@@ -25,7 +25,7 @@ app.post("/generate-reel", async (req, res) => {
       });
     }
 
-    console.log("🚀 OpenAI + Claude paralelo");
+    console.log("🚀 Gerando com OpenAI + Claude 3.5");
 
     // 🟢 OPENAI
     const openaiPromise = fetch("https://api.openai.com/v1/chat/completions", {
@@ -40,11 +40,11 @@ app.post("/generate-reel", async (req, res) => {
           {
             role: "system",
             content:
-              "Você cria roteiros virais para Reels/TikTok. Sempre comece com um hook forte nos primeiros 3 segundos, use linguagem simples e finalize com call to action."
+              "Você cria roteiros virais para Reels/TikTok. Comece com um hook forte, linguagem simples e finalize com call to action."
           },
           {
             role: "user",
-            content: `Crie um roteiro viral curto de até 30 segundos sobre: ${topic}`
+            content: `Crie um roteiro viral de até 30 segundos sobre: ${topic}`
           }
         ]
       })
@@ -59,7 +59,7 @@ app.post("/generate-reel", async (req, res) => {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-3-haiku-latest",
+        model: "claude-3-5-haiku-latest",
         max_tokens: 300,
         messages: [
           {
@@ -73,7 +73,7 @@ app.post("/generate-reel", async (req, res) => {
     // ⚡ pega o mais rápido
     const result = await Promise.race([openaiPromise, claudePromise]);
 
-    // 🧠 identifica resposta
+    // 🧠 identifica quem respondeu
     if (result.choices) {
       return res.json({
         success: true,
@@ -107,7 +107,7 @@ app.post("/generate-reel", async (req, res) => {
   }
 });
 
-// EXTRA (pra manter acordado)
+// 🔥 PING (pra uptime robot)
 app.get("/ping", (req, res) => {
   res.send("alive");
 });
