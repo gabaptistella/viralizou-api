@@ -8,25 +8,20 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+// TESTE
 app.get("/", (req, res) => {
-  res.send("Backend funcionando 🚀");
+  res.send("Viralizou backend rodando 🚀");
 });
 
+// TESTE POST (GARANTIA)
 app.post("/generate-reel", async (req, res) => {
   const { topic } = req.body;
 
-  try {
-    let roteiro = "Teste funcionando";
-    let provider = "mock";
-
-    res.json({ success: true, provider, roteiro });
-
-  } catch (error) {
-    res.status(500).json({
-      error: "Erro",
-      details: error.message,
-    });
-  }
+  res.json({
+    success: true,
+    provider: "mock",
+    roteiro: `Teste funcionando sobre: ${topic}`
+  });
 });
 
 app.listen(PORT, () => {
