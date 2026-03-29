@@ -38,7 +38,7 @@ app.post("/generate-reel", async (req, res) => {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-3-5-haiku-latest", ,
+        model: "claude-3-5-haiku-latest",
         max_tokens: 200,
         messages: [
           {
