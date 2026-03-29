@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const fetch = require("node-fetch"); // IMPORTANTE
 
 const app = express();
 
@@ -8,12 +9,16 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+// KEYS
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
 // TESTE
 app.get("/", (req, res) => {
   res.send("Viralizou backend rodando 🚀");
 });
 
-// 🎯 GERAR REEL (OpenAI + Claude)
+// 🎯 GERAR REEL
 app.post("/generate-reel", async (req, res) => {
   try {
     const { topic, provider = "openai" } = req.body;
@@ -26,45 +31,67 @@ app.post("/generate-reel", async (req, res) => {
 
     let roteiro = "";
 
+    console.log("Provider:", provider);
+    console.log("Topic:", topic);
+
+    // =========================
     // 🟢 OPENAI
+    // =========================
     if (provider === "openai") {
+      if (!OPENAI_API_KEY) {
+        return res.status(500).json({
+          error: "OPENAI_API_KEY não configurada"
+        });
+      }
+
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+          "Authorization": `Bearer ${OPENAI_API_KEY}`
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",
+          max_tokens: 150,
           messages: [
             {
               role: "system",
-              content: "Você cria roteiros virais para Reels/TikTok com hooks fortes."
+              content: "Você cria roteiros virais curtos para Reels/TikTok com hooks fortes."
             },
             {
               role: "user",
-              content: `Crie um roteiro viral curto sobre: ${topic}`
+              content: `Crie um roteiro viral de até 30 segundos sobre: ${topic}`
             }
           ]
         })
       });
 
       const data = await response.json();
-      roteiro = data.choices?.[0]?.message?.content || "Erro no OpenAI";
+      console.log("OpenAI response:", data);
+
+      roteiro = data.choices?.[0]?.message?.content || "Erro ao gerar com OpenAI";
     }
 
+    // =========================
     // 🔵 CLAUDE
+    // =========================
     if (provider === "claude") {
+      if (!ANTHROPIC_API_KEY) {
+        return res.status(500).json({
+          error: "ANTHROPIC_API_KEY não configurada"
+        });
+      }
+
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": process.env.ANTHROPIC_API_KEY,
+          "x-api-key": ANTHROPIC_API_KEY,
           "anthropic-version": "2023-06-01"
         },
         body: JSON.stringify({
-          model: "claude-3-haiku-latest",
-          max_tokens: 500,
+          model: "claude-3-haiku-20240307",
+          max_tokens: 200,
           messages: [
             {
               role: "user",
@@ -75,9 +102,9 @@ app.post("/generate-reel", async (req, res) => {
       });
 
       const data = await response.json();
+      console.log("Claude response:", data);
 
-      // 🔥 FIX IMPORTANTE DO CLAUDE
-      roteiro = data?.content?.map(c => c.text).join("") || "Erro no Claude";
+      roteiro = data.content?.[0]?.text || "Erro no Claude";
     }
 
     res.json({
@@ -87,6 +114,8 @@ app.post("/generate-reel", async (req, res) => {
     });
 
   } catch (error) {
+    console.error("Erro geral:", error);
+
     res.status(500).json({
       error: "Erro interno",
       details: error.message
@@ -94,13 +123,14 @@ app.post("/generate-reel", async (req, res) => {
   }
 });
 
-// OUTRO ENDPOINT
+// 🔊 TRANSCRIÇÃO (placeholder)
 app.post("/transcribe", (req, res) => {
   res.json({
     message: "Aqui vamos usar Whisper em breve 🔥"
   });
 });
 
+// START
 app.listen(PORT, () => {
   console.log("Rodando na porta " + PORT);
 });
