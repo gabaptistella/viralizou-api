@@ -7,7 +7,7 @@ const FormData = require("form-data");
 const app = express();
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } // 25MB
+  limits: { fileSize: 25 * 1024 * 1024 }
 });
 
 app.use(cors());
@@ -18,7 +18,6 @@ const PORT = process.env.PORT || 3000;
 console.log("🔑 Claude key:", process.env.ANTHROPIC_API_KEY ? "OK ✅" : "UNDEFINED ❌");
 console.log("🔑 OpenAI key:", process.env.OPENAI_API_KEY ? "OK ✅" : "UNDEFINED ❌");
 
-// TESTE
 app.get("/", (req, res) => {
   res.send("Viralizou backend rodando 🚀");
 });
@@ -26,13 +25,20 @@ app.get("/", (req, res) => {
 // 🎯 GERAR REEL
 app.post("/generate-reel", async (req, res) => {
   try {
-    const { topic } = req.body;
+    const { topic, language } = req.body;
 
     if (!topic) {
       return res.status(400).json({ error: "Topic é obrigatório" });
     }
 
-    console.log("🚀 Gerando com OpenAI + Claude...");
+    const langMap = {
+      "pt": "português brasileiro",
+      "en": "English",
+      "es": "español"
+    };
+    const lang = langMap[language] || "português brasileiro";
+
+    console.log(`🚀 Gerando em ${lang}...`);
 
     const openaiPromise = fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -45,11 +51,11 @@ app.post("/generate-reel", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: "Você cria roteiros virais para Reels/TikTok. Comece com um hook forte, linguagem simples e finalize com call to action."
+            content: `You create viral scripts for Reels/TikTok. Always respond in ${lang}. Start with a strong hook, simple language, finish with call to action.`
           },
           {
             role: "user",
-            content: `Crie um roteiro viral de até 30 segundos sobre: ${topic}`
+            content: `Create a viral script up to 30 seconds about: ${topic}`
           }
         ]
       })
@@ -68,7 +74,7 @@ app.post("/generate-reel", async (req, res) => {
         messages: [
           {
             role: "user",
-            content: `Crie um roteiro viral curto para reels. Comece com um hook forte. Tema: ${topic}`
+            content: `Create a short viral reel script in ${lang}. Strong hook first. Topic: ${topic}`
           }
         ]
       })
@@ -81,6 +87,7 @@ app.post("/generate-reel", async (req, res) => {
       return res.json({
         success: true,
         provider: "openai",
+        language: lang,
         roteiro: result.choices[0].message.content
       });
     }
@@ -90,11 +97,12 @@ app.post("/generate-reel", async (req, res) => {
       return res.json({
         success: true,
         provider: "claude",
+        language: lang,
         roteiro: result.content[0].text
       });
     }
 
-    return res.status(500).json({ error: "Nenhum provider respondeu corretamente", raw: result });
+    return res.status(500).json({ error: "Nenhum provider respondeu corretamente" });
 
   } catch (error) {
     console.error("🚨 Erro geral:", error);
@@ -109,7 +117,7 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
       return res.status(400).json({ error: "Arquivo de áudio obrigatório" });
     }
 
-    console.log("🎙️ Transcrevendo áudio:", req.file.originalname);
+    console.log("🎙️ Transcrevendo:", req.file.originalname);
 
     const formData = new FormData();
     formData.append("file", req.file.buffer, {
@@ -131,15 +139,11 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
     const data = await response.json();
 
     if (!data.text) {
-      console.log("❌ Whisper erro:", data);
       return res.status(500).json({ error: "Erro na transcrição", raw: data });
     }
 
     console.log("✅ Transcrição concluída");
-    return res.json({
-      success: true,
-      text: data.text
-    });
+    return res.json({ success: true, text: data.text });
 
   } catch (error) {
     console.error("🚨 Erro Whisper:", error);
