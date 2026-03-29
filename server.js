@@ -14,7 +14,7 @@ app.get("/", (req, res) => {
   res.send("Viralizou backend rodando 🚀");
 });
 
-// 🎯 GERAR REEL (OPENAI + CLAUDE PARALELO)
+// 🔥 ENDPOINT PRINCIPAL
 app.post("/generate-reel", async (req, res) => {
   try {
     const { topic } = req.body;
@@ -25,7 +25,7 @@ app.post("/generate-reel", async (req, res) => {
       });
     }
 
-    console.log("🚀 Gerando roteiro com OpenAI + Claude...");
+    console.log("🚀 OpenAI + Claude paralelo");
 
     // 🟢 OPENAI
     const openaiPromise = fetch("https://api.openai.com/v1/chat/completions", {
@@ -39,17 +39,18 @@ app.post("/generate-reel", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: "Você cria roteiros virais curtos para reels com hooks fortes."
+            content:
+              "Você cria roteiros virais para Reels/TikTok. Sempre comece com um hook forte nos primeiros 3 segundos, use linguagem simples e finalize com call to action."
           },
           {
             role: "user",
-            content: `Crie um roteiro viral de até 30 segundos sobre: ${topic}`
+            content: `Crie um roteiro viral curto de até 30 segundos sobre: ${topic}`
           }
         ]
       })
     }).then(res => res.json());
 
-    // 🔵 CLAUDE
+    // 🔵 CLAUDE (MODEL CORRETO)
     const claudePromise = fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -58,12 +59,12 @@ app.post("/generate-reel", async (req, res) => {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-3-haiku-20240307",
+        model: "claude-3-haiku-latest",
         max_tokens: 300,
         messages: [
           {
             role: "user",
-            content: `Crie um roteiro viral curto para reels sobre: ${topic}`
+            content: `Crie um roteiro viral curto para reels. Comece com um hook forte. Tema: ${topic}`
           }
         ]
       })
@@ -72,7 +73,7 @@ app.post("/generate-reel", async (req, res) => {
     // ⚡ pega o mais rápido
     const result = await Promise.race([openaiPromise, claudePromise]);
 
-    // 🧠 identifica quem respondeu
+    // 🧠 identifica resposta
     if (result.choices) {
       return res.json({
         success: true,
@@ -89,19 +90,26 @@ app.post("/generate-reel", async (req, res) => {
       });
     }
 
+    console.log("❌ resposta inválida:", result);
+
     return res.status(500).json({
       error: "Nenhum provider respondeu corretamente",
       raw: result
     });
 
   } catch (error) {
-    console.error("Erro geral:", error);
+    console.error("🚨 erro geral:", error);
 
     res.status(500).json({
       error: "Erro interno",
       details: error.message
     });
   }
+});
+
+// EXTRA (pra manter acordado)
+app.get("/ping", (req, res) => {
+  res.send("alive");
 });
 
 app.listen(PORT, () => {
