@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const fetch = require("node-fetch"); // IMPORTANTE
+const fetch = require("node-fetch");
 
 const app = express();
 
@@ -9,7 +9,6 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// KEYS
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -30,20 +29,54 @@ app.post("/generate-reel", async (req, res) => {
     }
 
     let roteiro = "";
+    let usedProvider = provider;
 
-    console.log("Provider:", provider);
-    console.log("Topic:", topic);
+    console.log("👉 Provider:", provider);
+    console.log("👉 Topic:", topic);
 
     // =========================
-    // 🟢 OPENAI
+    // 🔵 CLAUDE
     // =========================
-    if (provider === "openai") {
-      if (!OPENAI_API_KEY) {
-        return res.status(500).json({
-          error: "OPENAI_API_KEY não configurada"
+    if (provider === "claude") {
+      try {
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01"
+          },
+          body: JSON.stringify({
+            model: "claude-3-haiku-20240307",
+            max_tokens: 200,
+            messages: [
+              {
+                role: "user",
+                content: `Crie um roteiro viral curto para reels sobre: ${topic}`
+              }
+            ]
+          })
         });
-      }
 
+        const data = await response.json();
+        console.log("🔥 Claude response:", data);
+
+        if (data.content && data.content.length > 0) {
+          roteiro = data.content[0].text;
+        } else {
+          throw new Error(data.error?.message || "Claude falhou");
+        }
+
+      } catch (err) {
+        console.log("❌ Claude falhou, usando OpenAI fallback...");
+        usedProvider = "openai";
+      }
+    }
+
+    // =========================
+    // 🟢 OPENAI (fallback ou padrão)
+    // =========================
+    if (provider === "openai" || usedProvider === "openai") {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -67,54 +100,19 @@ app.post("/generate-reel", async (req, res) => {
       });
 
       const data = await response.json();
-      console.log("OpenAI response:", data);
+      console.log("🧠 OpenAI response:", data);
 
-      roteiro = data.choices?.[0]?.message?.content || "Erro ao gerar com OpenAI";
-    }
-
-    // =========================
-    // 🔵 CLAUDE
-    // =========================
-    if (provider === "claude") {
-      if (!ANTHROPIC_API_KEY) {
-        return res.status(500).json({
-          error: "ANTHROPIC_API_KEY não configurada"
-        });
-      }
-
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01"
-        },
-        body: JSON.stringify({
-          model: "claude-3-haiku-20240307",
-          max_tokens: 200,
-          messages: [
-            {
-              role: "user",
-              content: `Crie um roteiro viral curto para reels sobre: ${topic}`
-            }
-          ]
-        })
-      });
-
-      const data = await response.json();
-      console.log("Claude response:", data);
-
-      roteiro = data.content?.[0]?.text || "Erro no Claude";
+      roteiro = data.choices?.[0]?.message?.content || "Erro OpenAI";
     }
 
     res.json({
       success: true,
-      provider,
+      provider: usedProvider,
       roteiro
     });
 
   } catch (error) {
-    console.error("Erro geral:", error);
+    console.error("🚨 Erro geral:", error);
 
     res.status(500).json({
       error: "Erro interno",
@@ -123,14 +121,13 @@ app.post("/generate-reel", async (req, res) => {
   }
 });
 
-// 🔊 TRANSCRIÇÃO (placeholder)
+// OUTRO ENDPOINT
 app.post("/transcribe", (req, res) => {
   res.json({
     message: "Aqui vamos usar Whisper em breve 🔥"
   });
 });
 
-// START
 app.listen(PORT, () => {
-  console.log("Rodando na porta " + PORT);
+  console.log("🚀 Rodando na porta " + PORT);
 });
