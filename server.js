@@ -28,57 +28,31 @@ app.get("/", (req, res) => {
 app.post("/generate-reel", async (req, res) => {
   try {
     const { topic, language } = req.body;
+    if (!topic) return res.status(400).json({ error: "Topic é obrigatório" });
 
-    if (!topic) {
-      return res.status(400).json({ error: "Topic é obrigatório" });
-    }
-
-    const langMap = {
-      "pt": "português brasileiro",
-      "en": "English",
-      "es": "español"
-    };
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
-
     console.log(`🚀 Gerando em ${lang}...`);
 
     const openaiPromise = fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-      },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          {
-            role: "system",
-            content: `You create viral scripts for Reels/TikTok. Always respond in ${lang}. Start with a strong hook, simple language, finish with call to action.`
-          },
-          {
-            role: "user",
-            content: `Create a viral script up to 30 seconds about: ${topic}`
-          }
+          { role: "system", content: `You create viral scripts for Reels/TikTok. Always respond in ${lang}. Start with a strong hook, simple language, finish with call to action.` },
+          { role: "user", content: `Create a viral script up to 30 seconds about: ${topic}` }
         ]
       })
     }).then(r => r.json());
 
     const claudePromise = fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01"
-      },
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 800,
-        messages: [
-          {
-            role: "user",
-            content: `Create a short viral reel script in ${lang}. Strong hook first. Topic: ${topic}`
-          }
-        ]
+        messages: [{ role: "user", content: `Create a short viral reel script in ${lang}. Strong hook first. Topic: ${topic}` }]
       })
     }).then(r => r.json());
 
@@ -86,26 +60,13 @@ app.post("/generate-reel", async (req, res) => {
 
     if (result.choices) {
       console.log("✅ Respondeu: OpenAI");
-      return res.json({
-        success: true,
-        provider: "openai",
-        language: lang,
-        roteiro: result.choices[0].message.content
-      });
+      return res.json({ success: true, provider: "openai", language: lang, roteiro: result.choices[0].message.content });
     }
-
     if (result.content) {
       console.log("✅ Respondeu: Claude");
-      return res.json({
-        success: true,
-        provider: "claude",
-        language: lang,
-        roteiro: result.content[0].text
-      });
+      return res.json({ success: true, provider: "claude", language: lang, roteiro: result.content[0].text });
     }
-
     return res.status(500).json({ error: "Nenhum provider respondeu corretamente" });
-
   } catch (error) {
     console.error("🚨 Erro geral:", error);
     res.status(500).json({ error: "Erro interno", details: error.message });
@@ -115,38 +76,25 @@ app.post("/generate-reel", async (req, res) => {
 // 🎙️ TRANSCREVER ÁUDIO COM WHISPER
 app.post("/transcribe", upload.single("audio"), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "Arquivo de áudio obrigatório" });
-    }
-
+    if (!req.file) return res.status(400).json({ error: "Arquivo de áudio obrigatório" });
     console.log("🎙️ Transcrevendo:", req.file.originalname);
 
     const formData = new FormData();
-    formData.append("file", req.file.buffer, {
-      filename: req.file.originalname,
-      contentType: req.file.mimetype
-    });
+    formData.append("file", req.file.buffer, { filename: req.file.originalname, contentType: req.file.mimetype });
     formData.append("model", "whisper-1");
     formData.append("language", "pt");
 
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...formData.getHeaders()
-      },
+      headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`, ...formData.getHeaders() },
       body: formData
     });
 
     const data = await response.json();
-
-    if (!data.text) {
-      return res.status(500).json({ error: "Erro na transcrição", raw: data });
-    }
+    if (!data.text) return res.status(500).json({ error: "Erro na transcrição", raw: data });
 
     console.log("✅ Transcrição concluída");
     return res.json({ success: true, text: data.text });
-
   } catch (error) {
     console.error("🚨 Erro Whisper:", error);
     res.status(500).json({ error: "Erro interno", details: error.message });
@@ -156,11 +104,8 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
 // 🎙️ TEXT TO SPEECH — ELEVENLABS
 app.post("/text-to-speech", async (req, res) => {
   try {
-    const { text, voice, language } = req.body;
-
-    if (!text) {
-      return res.status(400).json({ error: "Texto obrigatório" });
-    }
+    const { text, voice } = req.body;
+    if (!text) return res.status(400).json({ error: "Texto obrigatório" });
 
     const voiceMap = {
       "pt_male": "pNInz6obpgDQGcFmaJgB",
@@ -172,29 +117,17 @@ app.post("/text-to-speech", async (req, res) => {
     };
 
     const voiceId = voiceMap[voice] || voiceMap["pt_female"];
-
     console.log(`🎙️ Gerando voz: ${voice}`);
 
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "xi-api-key": process.env.ELEVENLABS_API_KEY
-        },
-        body: JSON.stringify({
-          text: text,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-            style: 0.5,
-            use_speaker_boost: true
-          }
-        })
-      }
-    );
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "xi-api-key": process.env.ELEVENLABS_API_KEY },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.5, use_speaker_boost: true }
+      })
+    });
 
     if (!response.ok) {
       const error = await response.json();
@@ -203,10 +136,8 @@ app.post("/text-to-speech", async (req, res) => {
 
     const audioBuffer = await response.buffer();
     const audioBase64 = audioBuffer.toString("base64");
-
     console.log("✅ Voz gerada com sucesso");
     return res.json({ success: true, audio: audioBase64, format: "mp3" });
-
   } catch (error) {
     console.error("🚨 Erro ElevenLabs:", error);
     res.status(500).json({ error: "Erro interno", details: error.message });
@@ -219,7 +150,6 @@ app.get("/ig-webhook", (req, res) => {
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
   const VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN || "viralizou2026";
-
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("✅ Webhook verificado!");
     return res.status(200).send(challenge);
@@ -230,24 +160,15 @@ app.get("/ig-webhook", (req, res) => {
 app.post("/ig-webhook", async (req, res) => {
   try {
     const body = req.body;
-
-    if (body.object !== "instagram") {
-      return res.status(404).json({ error: "Not instagram" });
-    }
+    if (body.object !== "instagram") return res.status(404).json({ error: "Not instagram" });
 
     for (const entry of body.entry) {
-      for (const event of entry.messaging || []) {
-        await processIGEvent(event);
-      }
+      for (const event of entry.messaging || []) await processIGEvent(event);
       for (const change of entry.changes || []) {
-        if (change.field === "comments") {
-          await processComment(change.value);
-        }
+        if (change.field === "comments") await processComment(change.value);
       }
     }
-
     return res.status(200).json({ status: "ok" });
-
   } catch (error) {
     console.error("🚨 Webhook erro:", error);
     res.status(500).json({ error: error.message });
@@ -260,7 +181,6 @@ async function processIGEvent(event) {
     const message = event.message?.text?.toLowerCase();
     if (!senderId || !message) return;
 
-    // Verificar opt-out
     if (["parar", "stop", "unsubscribe"].includes(message)) {
       await addOptOut(senderId);
       await sendIGDM(senderId, "Você foi removido da lista. Não receberá mais mensagens automáticas ✅");
@@ -268,13 +188,11 @@ async function processIGEvent(event) {
     }
 
     console.log(`📩 DM recebida de ${senderId}: ${message}`);
-
     const flows = await getActiveFlows("dm_keyword");
     for (const flow of flows) {
       if (message.includes(flow.keyword.toLowerCase())) {
         const isOptedOut = await checkOptOut(senderId);
         if (isOptedOut) return;
-
         console.log(`🎯 Gatilho ativado: ${flow.keyword}`);
         await sendIGDM(senderId, flow.response_message);
         await logDM(senderId, flow.id, message);
@@ -294,20 +212,14 @@ async function processComment(comment) {
     if (!userId || !text) return;
 
     console.log(`💬 Comentário de ${userId}: ${text}`);
-
     const flows = await getActiveFlows("comment_keyword");
     for (const flow of flows) {
       if (text.includes(flow.keyword.toLowerCase())) {
         const isOptedOut = await checkOptOut(userId);
         if (isOptedOut) return;
-
         console.log(`🎯 Comentário gatilho: ${flow.keyword}`);
-        if (flow.reply_comment) {
-          await replyComment(mediaId, comment.id, flow.comment_reply);
-        }
-        if (flow.send_dm) {
-          await sendIGDM(userId, flow.response_message);
-        }
+        if (flow.reply_comment) await replyComment(mediaId, comment.id, flow.comment_reply);
+        if (flow.send_dm) await sendIGDM(userId, flow.response_message);
         await logDM(userId, flow.id, text);
         break;
       }
@@ -319,20 +231,11 @@ async function processComment(comment) {
 
 async function sendIGDM(recipientId, message) {
   try {
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/me/messages`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.IG_ACCESS_TOKEN}`
-        },
-        body: JSON.stringify({
-          recipient: { id: recipientId },
-          message: { text: message }
-        })
-      }
-    );
+    const response = await fetch(`https://graph.facebook.com/v18.0/me/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.IG_ACCESS_TOKEN}` },
+      body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message } })
+    });
     const data = await response.json();
     console.log("✅ DM enviada:", data);
     return data;
@@ -343,17 +246,11 @@ async function sendIGDM(recipientId, message) {
 
 async function replyComment(mediaId, commentId, message) {
   try {
-    await fetch(
-      `https://graph.facebook.com/v18.0/${mediaId}/comments`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.IG_ACCESS_TOKEN}`
-        },
-        body: JSON.stringify({ message })
-      }
-    );
+    await fetch(`https://graph.facebook.com/v18.0/${mediaId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.IG_ACCESS_TOKEN}` },
+      body: JSON.stringify({ message })
+    });
     console.log("✅ Comentário respondido");
   } catch (error) {
     console.error("🚨 Erro replyComment:", error);
@@ -364,12 +261,7 @@ async function getActiveFlows(trigger_type) {
   try {
     const response = await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/autodm_flows?status=eq.active&trigger_type=eq.${trigger_type}`,
-      {
-        headers: {
-          "apikey": process.env.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
-        }
-      }
+      { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
     );
     return await response.json();
   } catch (error) {
@@ -380,23 +272,11 @@ async function getActiveFlows(trigger_type) {
 
 async function logDM(userId, flowId, triggerText) {
   try {
-    await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/autodm_logs`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": process.env.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
-        },
-        body: JSON.stringify({
-          ig_user_id: userId,
-          flow_id: flowId,
-          trigger_text: triggerText,
-          sent_at: new Date().toISOString()
-        })
-      }
-    );
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/autodm_logs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ ig_user_id: userId, flow_id: flowId, trigger_text: triggerText, sent_at: new Date().toISOString() })
+    });
   } catch (error) {
     console.error("🚨 Erro logDM:", error);
   }
@@ -406,12 +286,7 @@ async function checkOptOut(igUserId) {
   try {
     const response = await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/autodm_optouts?ig_user_id=eq.${igUserId}`,
-      {
-        headers: {
-          "apikey": process.env.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
-        }
-      }
+      { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
     );
     const data = await response.json();
     return data.length > 0;
@@ -423,21 +298,11 @@ async function checkOptOut(igUserId) {
 
 async function addOptOut(igUserId) {
   try {
-    await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/autodm_optouts`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": process.env.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
-        },
-        body: JSON.stringify({
-          ig_user_id: igUserId,
-          opted_out_at: new Date().toISOString()
-        })
-      }
-    );
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/autodm_optouts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ ig_user_id: igUserId, opted_out_at: new Date().toISOString() })
+    });
     console.log("✅ Opt-out registrado:", igUserId);
   } catch (error) {
     console.error("🚨 Erro addOptOut:", error);
@@ -448,35 +313,14 @@ async function addOptOut(igUserId) {
 app.post("/autodm/flows", async (req, res) => {
   try {
     const { user_id, name, trigger_type, keyword, response_message, reply_comment, comment_reply, send_dm } = req.body;
-
-    const response = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/autodm_flows`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": process.env.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
-        },
-        body: JSON.stringify({
-          user_id,
-          name,
-          trigger_type,
-          keyword,
-          response_message,
-          reply_comment: reply_comment || false,
-          comment_reply: comment_reply || "",
-          send_dm: send_dm || true,
-          status: "active",
-          created_at: new Date().toISOString()
-        })
-      }
-    );
-
+    const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/autodm_flows`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ user_id, name, trigger_type, keyword, response_message, reply_comment: reply_comment || false, comment_reply: comment_reply || "", send_dm: send_dm || true, status: "active", created_at: new Date().toISOString() })
+    });
     const data = await response.json();
     console.log("✅ Fluxo criado:", data);
     return res.json({ success: true, flow: data });
-
   } catch (error) {
     console.error("🚨 Erro criar fluxo:", error);
     res.status(500).json({ error: error.message });
@@ -487,20 +331,12 @@ app.post("/autodm/flows", async (req, res) => {
 app.get("/autodm/flows/:user_id", async (req, res) => {
   try {
     const { user_id } = req.params;
-
     const response = await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/autodm_flows?user_id=eq.${user_id}`,
-      {
-        headers: {
-          "apikey": process.env.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
-        }
-      }
+      { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
     );
-
     const flows = await response.json();
     return res.json({ success: true, flows });
-
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -510,20 +346,12 @@ app.get("/autodm/flows/:user_id", async (req, res) => {
 app.get("/autodm/stats/:user_id", async (req, res) => {
   try {
     const { user_id } = req.params;
-
     const response = await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/autodm_logs?flow_id=in.(select id from autodm_flows where user_id='${user_id}')`,
-      {
-        headers: {
-          "apikey": process.env.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
-        }
-      }
+      { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
     );
-
     const logs = await response.json();
     return res.json({ success: true, total_dms: logs.length, logs });
-
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -533,47 +361,20 @@ app.get("/autodm/stats/:user_id", async (req, res) => {
 app.post("/autodm/generate-message", async (req, res) => {
   try {
     const { keyword, niche, objective, language } = req.body;
-
-    const langMap = {
-      "pt": "português brasileiro",
-      "en": "English",
-      "es": "español"
-    };
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01"
-      },
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: `Crie uma mensagem direta para Instagram em ${lang}.
-            Palavra-chave que ativou: ${keyword}
-            Nicho: ${niche}
-            Objetivo: ${objective}
-            
-            A mensagem deve:
-            - Ser pessoal e natural (não parecer bot)
-            - Máximo 3 frases
-            - Incluir CTA
-            - Tom amigável
-            
-            Retorne apenas a mensagem, sem explicações.`
-          }
-        ]
+        messages: [{ role: "user", content: `Crie uma mensagem direta para Instagram em ${lang}. Palavra-chave: ${keyword}. Nicho: ${niche}. Objetivo: ${objective}. Máximo 3 frases, natural, com CTA. Retorne apenas a mensagem.` }]
       })
     });
-
     const data = await response.json();
     return res.json({ success: true, message: data.content[0].text });
-
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -583,81 +384,244 @@ app.post("/autodm/generate-message", async (req, res) => {
 app.post("/autodm/analyze-style", async (req, res) => {
   try {
     const { captions, user_id, language } = req.body;
+    if (!captions) return res.status(400).json({ error: "Legendas obrigatórias" });
 
-    if (!captions) {
-      return res.status(400).json({ error: "Legendas obrigatórias" });
-    }
-
-    const langMap = {
-      "pt": "português brasileiro",
-      "en": "English",
-      "es": "español"
-    };
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01"
-      },
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 500,
-        messages: [
-          {
-            role: "user",
-            content: `Analise o estilo de escrita dessas legendas do Instagram em ${lang}:
-
-${captions}
-
-Retorne um JSON com:
-{
-  "tone": "descrição do tom",
-  "emoji_usage": "baixo/moderado/alto",
-  "vocabulary": "simples/técnico/coloquial",
-  "favorite_cta": "exemplo do CTA mais usado",
-  "summary": "resumo do estilo em 1 frase"
-}
-
-Retorne APENAS o JSON, sem explicações.`
-          }
-        ]
+        messages: [{ role: "user", content: `Analise o estilo de escrita dessas legendas do Instagram em ${lang}:\n\n${captions}\n\nRetorne JSON com: {"tone":"...","emoji_usage":"baixo/moderado/alto","vocabulary":"simples/técnico/coloquial","favorite_cta":"...","summary":"..."}. Apenas o JSON.` }]
       })
     });
 
     const data = await response.json();
-    const analysisText = data.content[0].text;
-    const clean = analysisText.replace(/```json|```/g, "").trim();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const analysis = JSON.parse(clean);
 
-    await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/user_styles`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": process.env.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`,
-          "Prefer": "return=representation"
-        },
-        body: JSON.stringify({
-          user_id,
-          tone: analysis.tone,
-          emoji_usage: analysis.emoji_usage,
-          vocabulary: analysis.vocabulary,
-          favorite_cta: analysis.favorite_cta,
-          raw_analysis: JSON.stringify(analysis)
-        })
-      }
-    );
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/user_styles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`, "Prefer": "return=representation" },
+      body: JSON.stringify({ user_id, tone: analysis.tone, emoji_usage: analysis.emoji_usage, vocabulary: analysis.vocabulary, favorite_cta: analysis.favorite_cta, raw_analysis: JSON.stringify(analysis) })
+    });
 
     console.log("✅ Estilo analisado e salvo");
     return res.json({ success: true, analysis });
-
   } catch (error) {
     console.error("🚨 Erro analyze-style:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🛠️ FERRAMENTAS — GERADOR DE BIO
+app.post("/tools/generate-bio", async (req, res) => {
+  try {
+    const { niche, diferencial, cta, emojis, language } = req.body;
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 800,
+        messages: [{ role: "user", content: `Crie 5 opções de bio para Instagram em ${lang}.
+Nicho: ${niche}
+Diferencial: ${diferencial}
+CTA desejado: ${cta}
+Usar emojis: ${emojis ? "sim" : "não"}
+
+Regras:
+- Máximo 150 caracteres cada
+- Formato: quem você é + o que faz + CTA
+- Cada bio deve ser diferente
+
+Retorne JSON:
+{"bios": ["bio1", "bio2", "bio3", "bio4", "bio5"]}
+Apenas o JSON.` }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+    return res.json({ success: true, bios: result.bios });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🛠️ FERRAMENTAS — KIT DE LANÇAMENTO
+app.post("/tools/generate-launch-kit", async (req, res) => {
+  try {
+    const { product, price, audience, benefit, date, platform, language } = req.body;
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: `Crie um kit completo de lançamento em ${lang}.
+Produto: ${product}
+Preço: ${price}
+Público: ${audience}
+Benefício principal: ${benefit}
+Data de lançamento: ${date}
+Plataforma: ${platform}
+
+Retorne JSON com:
+{
+  "cronograma": [{"dia": 7, "tipo": "post", "conteudo": "..."}],
+  "posts": [{"dia": 1, "hook": "...", "desenvolvimento": "...", "cta": "..."}],
+  "stories": [{"dia": 1, "stories": ["...", "...", "..."]}],
+  "autodm": {"keyword": "...", "mensagens": ["msg1", "msg2", "msg3", "msg4"]},
+  "email": {"assunto": "...", "corpo": "..."}
+}
+Apenas o JSON.` }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+    return res.json({ success: true, kit: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🛠️ FERRAMENTAS — YOUTUBE
+app.post("/tools/generate-youtube", async (req, res) => {
+  try {
+    const { topic, niche, keyword, duration, language } = req.body;
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: `Crie um pacote completo para YouTube em ${lang}.
+Tema: ${topic}
+Nicho: ${niche}
+Palavra-chave: ${keyword}
+Duração: ${duration} minutos
+
+Retorne JSON:
+{
+  "titulos": ["titulo1", "titulo2", "titulo3", "titulo4", "titulo5"],
+  "descricao": "descrição completa com SEO",
+  "tags": ["tag1", "tag2"],
+  "hashtags": ["#hash1", "#hash2"],
+  "thumbnail": {"texto_principal": "...", "subtexto": "...", "cor_sugerida": "..."},
+  "tela_final": "script dos últimos 20 segundos"
+}
+Apenas o JSON.` }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+    return res.json({ success: true, youtube: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🛠️ FERRAMENTAS — MELHOR HORÁRIO
+app.post("/tools/best-time", async (req, res) => {
+  try {
+    const { niche, country, platform, content_type, language } = req.body;
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 800,
+        messages: [{ role: "user", content: `Analise o melhor horário para postar em ${lang}.
+Nicho: ${niche}
+País: ${country}
+Plataforma: ${platform}
+Tipo de conteúdo: ${content_type}
+
+Retorne JSON:
+{
+  "calendario": [
+    {"dia": "Segunda", "melhor": "19h", "bom": "12h", "evitar": "6h"},
+    {"dia": "Terça", "melhor": "20h", "bom": "18h", "evitar": "8h"},
+    {"dia": "Quarta", "melhor": "19h", "bom": "21h", "evitar": "7h"},
+    {"dia": "Quinta", "melhor": "18h", "bom": "20h", "evitar": "9h"},
+    {"dia": "Sexta", "melhor": "17h", "bom": "19h", "evitar": "10h"},
+    {"dia": "Sábado", "melhor": "10h", "bom": "15h", "evitar": "22h"},
+    {"dia": "Domingo", "melhor": "11h", "bom": "16h", "evitar": "23h"}
+  ],
+  "insights": "análise geral do comportamento da audiência",
+  "dica_personalizada": "dica específica para o nicho e plataforma"
+}
+Apenas o JSON.` }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+    return res.json({ success: true, horarios: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🛠️ FERRAMENTAS — GERADOR DE COLLAB
+app.post("/tools/generate-collab", async (req, res) => {
+  try {
+    const { my_niche, my_followers, partner_username, objective, language } = req.body;
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: `Crie uma estratégia de collab em ${lang}.
+Meu nicho: ${my_niche}
+Meus seguidores: ${my_followers}
+Parceiro: @${partner_username}
+Objetivo: ${objective}
+
+Retorne JSON:
+{
+  "compatibilidade": {"score": 85, "descricao": "..."},
+  "pontos_positivos": ["ponto1", "ponto2", "ponto3"],
+  "formatos_sugeridos": ["formato1", "formato2", "formato3"],
+  "roteiro": "roteiro completo da collab",
+  "dm_abordagem": "mensagem pronta para enviar ao parceiro",
+  "contrato_basico": "pontos principais do acordo"
+}
+Apenas o JSON.` }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+    return res.json({ success: true, collab: result });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
