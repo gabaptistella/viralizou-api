@@ -187,13 +187,11 @@ async function processIGEvent(event) {
       return;
     }
 
-    console.log(`📩 DM recebida de ${senderId}: ${message}`);
     const flows = await getActiveFlows("dm_keyword");
     for (const flow of flows) {
       if (message.includes(flow.keyword.toLowerCase())) {
         const isOptedOut = await checkOptOut(senderId);
         if (isOptedOut) return;
-        console.log(`🎯 Gatilho ativado: ${flow.keyword}`);
         await sendIGDM(senderId, flow.response_message);
         await logDM(senderId, flow.id, message);
         break;
@@ -211,13 +209,11 @@ async function processComment(comment) {
     const mediaId = comment.media?.id;
     if (!userId || !text) return;
 
-    console.log(`💬 Comentário de ${userId}: ${text}`);
     const flows = await getActiveFlows("comment_keyword");
     for (const flow of flows) {
       if (text.includes(flow.keyword.toLowerCase())) {
         const isOptedOut = await checkOptOut(userId);
         if (isOptedOut) return;
-        console.log(`🎯 Comentário gatilho: ${flow.keyword}`);
         if (flow.reply_comment) await replyComment(mediaId, comment.id, flow.comment_reply);
         if (flow.send_dm) await sendIGDM(userId, flow.response_message);
         await logDM(userId, flow.id, text);
@@ -236,9 +232,7 @@ async function sendIGDM(recipientId, message) {
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.IG_ACCESS_TOKEN}` },
       body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message } })
     });
-    const data = await response.json();
-    console.log("✅ DM enviada:", data);
-    return data;
+    return await response.json();
   } catch (error) {
     console.error("🚨 Erro sendIGDM:", error);
   }
@@ -251,7 +245,6 @@ async function replyComment(mediaId, commentId, message) {
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.IG_ACCESS_TOKEN}` },
       body: JSON.stringify({ message })
     });
-    console.log("✅ Comentário respondido");
   } catch (error) {
     console.error("🚨 Erro replyComment:", error);
   }
@@ -291,7 +284,6 @@ async function checkOptOut(igUserId) {
     const data = await response.json();
     return data.length > 0;
   } catch (error) {
-    console.error("🚨 Erro checkOptOut:", error);
     return false;
   }
 }
@@ -303,7 +295,6 @@ async function addOptOut(igUserId) {
       headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
       body: JSON.stringify({ ig_user_id: igUserId, opted_out_at: new Date().toISOString() })
     });
-    console.log("✅ Opt-out registrado:", igUserId);
   } catch (error) {
     console.error("🚨 Erro addOptOut:", error);
   }
@@ -570,23 +561,10 @@ app.post("/tools/generate-carousel", async (req, res) => {
     const size = sizeMap[formato] || sizeMap["quadrado"];
 
     const finalidadePrompts = {
-      "carrossel": `
-        - Slide 1: capa com hook forte
-        - Slides intermediários: conteúdo em tópicos
-        - Último slide: CTA e conclusão`,
-      "post": `
-        - Apenas 1 slide impactante
-        - Texto curto e direto
-        - Visual limpo`,
-      "stories": `
-        - Cada story independente
-        - Texto mínimo (max 10 palavras)
-        - CTA apenas no último`,
-      "produto": `
-        - Slide 1: nome + headline
-        - Slide 2: 3 benefícios principais
-        - Slide 3: prova social
-        - Slide 4: preço + CTA urgente`
+      "carrossel": `- Slide 1: capa com hook forte\n- Slides intermediários: conteúdo em tópicos\n- Último slide: CTA e conclusão`,
+      "post": `- Apenas 1 slide impactante\n- Texto curto e direto\n- Visual limpo`,
+      "stories": `- Cada story independente\n- Texto mínimo (max 10 palavras)\n- CTA apenas no último`,
+      "produto": `- Slide 1: nome + headline\n- Slide 2: 3 benefícios\n- Slide 3: prova social\n- Slide 4: preço + CTA urgente`
     };
 
     const estrutura = finalidadePrompts[finalidade] || finalidadePrompts["carrossel"];
@@ -597,40 +575,7 @@ app.post("/tools/generate-carousel", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.
-Tema: ${tema}
-Nicho: ${niche}
-Slides: ${slides_count}
-Formato: ${formato} (${size.width}x${size.height}px)
-Finalidade: ${finalidade}
-
-Estrutura:
-${estrutura}
-
-Regras:
-- Títulos max 5 palavras
-- Max 3 bullet points por slide
-- Um emoji por slide
-
-Retorne JSON:
-{
-  "slides": [
-    {
-      "numero": 1,
-      "titulo": "...",
-      "corpo": "...",
-      "emoji": "🔥",
-      "cor_fundo": "${cores.cor_fundo}",
-      "cor_texto": "${cores.cor_texto}"
-    }
-  ],
-  "legenda": "...",
-  "hashtags": ["..."],
-  "cta": "...",
-  "tamanho": "${size.width}x${size.height}",
-  "formato": "${formato}"
-}
-Apenas o JSON.` }]
+        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\n\nEstrutura:\n${estrutura}\n\nRegras:\n- Títulos max 5 palavras\n- Max 3 bullet points por slide\n- Um emoji por slide\n\nRetorne JSON:\n{\n"slides": [{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}"}],\n"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"\n}\nApenas o JSON.` }]
       })
     });
 
@@ -640,9 +585,90 @@ Apenas o JSON.` }]
 
     console.log("✅ Carrossel gerado:", formato, finalidade);
     return res.json({ success: true, carousel: result, size });
-
   } catch (error) {
     console.error("🚨 Erro generate-carousel:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 📊 ANALYTICS — ANALISAR PERFIL
+app.post("/analytics/analyze-profile", async (req, res) => {
+  try {
+    const { username, user_id, language } = req.body;
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: `Analise esse perfil do Instagram em ${lang} e gere insights realistas:\n\nUsername: @${username}\n\nRetorne JSON:\n{\n"score":78,"score_label":"Muito bom","engagement_rate":4.2,"engagement_label":"Acima da média","crescimento_mensal":"+2.3k","melhor_horario":"Terça e Quinta às 19h","tipo_conteudo_top":"Reels","insights":["insight1","insight2","insight3"],"sugestoes":["sugestao1","sugestao2","sugestao3"],"score_breakdown":{"engajamento":85,"crescimento":70,"consistencia":75,"qualidade":80},"posts_patrocinados_estimativa":2,"valor_publi_estimado":"R$500-2000"\n}\nApenas JSON.` }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const analysis = JSON.parse(clean);
+
+    // Salvar uso no Supabase
+    await fetch(`${process.env.SUPABASE_URL}/rest/v1/analytics_usage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ user_id, username_analyzed: username, type: "profile", created_at: new Date().toISOString() })
+    });
+
+    console.log("✅ Perfil analisado:", username);
+    return res.json({ success: true, username, analysis });
+  } catch (error) {
+    console.error("🚨 Erro analyze-profile:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 📊 ANALYTICS — ANALISAR CONCORRENTE
+app.post("/analytics/analyze-competitor", async (req, res) => {
+  try {
+    const { username, my_username, my_followers, language } = req.body;
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: `Analise esse concorrente do Instagram e compare com meu perfil em ${lang}:\n\nMeu perfil: @${my_username} (${my_followers} seguidores)\nConcorrente: @${username}\n\nRetorne JSON:\n{\n"competitor":{"username":"${username}","score":71,"followers_estimate":"50k-100k","engagement_rate":2.8,"posts_per_week":4,"melhor_horario":"20h","niche":"Fitness","top_hashtags":["#fitness","#saude"],"sponsored_posts_estimate":3,"valor_publi_estimado":"R$500-2000"},\n"benchmarking":{"engajamento":{"eu":4.2,"concorrente":2.8,"vencedor":"eu"},"crescimento":{"eu":"+2.3k/mês","concorrente":"+1.1k/mês","vencedor":"eu"},"consistencia":{"eu":"3x/semana","concorrente":"4x/semana","vencedor":"concorrente"}},\n"analise_geral":"análise completa","sugestoes_para_superar":["s1","s2","s3"],"pontos_fortes_concorrente":["p1","p2"],"oportunidades":["o1","o2"]\n}\nApenas JSON.` }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+
+    console.log("✅ Concorrente analisado:", username);
+    return res.json({ success: true, competitor_analysis: result });
+  } catch (error) {
+    console.error("🚨 Erro analyze-competitor:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 📊 ANALYTICS — VERIFICAR USO
+app.get("/analytics/usage/:user_id", async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const mesAno = new Date().toISOString().slice(0, 7);
+
+    const response = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/analytics_usage?user_id=eq.${user_id}&mes_ano=eq.${mesAno}`,
+      { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
+    );
+    const data = await response.json();
+    return res.json({ success: true, analises_usadas: data.length, mes_ano: mesAno });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
