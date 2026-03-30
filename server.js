@@ -260,11 +260,21 @@ async function processIGEvent(event) {
     const message = event.message?.text?.toLowerCase();
     if (!senderId || !message) return;
 
+    // Verificar opt-out
+    if (["parar", "stop", "unsubscribe"].includes(message)) {
+      await addOptOut(senderId);
+      await sendIGDM(senderId, "Você foi removido da lista. Não receberá mais mensagens automáticas ✅");
+      return;
+    }
+
     console.log(`📩 DM recebida de ${senderId}: ${message}`);
 
     const flows = await getActiveFlows("dm_keyword");
     for (const flow of flows) {
       if (message.includes(flow.keyword.toLowerCase())) {
+        const isOptedOut = await checkOptOut(senderId);
+        if (isOptedOut) return;
+
         console.log(`🎯 Gatilho ativado: ${flow.keyword}`);
         await sendIGDM(senderId, flow.response_message);
         await logDM(senderId, flow.id, message);
@@ -288,6 +298,9 @@ async function processComment(comment) {
     const flows = await getActiveFlows("comment_keyword");
     for (const flow of flows) {
       if (text.includes(flow.keyword.toLowerCase())) {
+        const isOptedOut = await checkOptOut(userId);
+        if (isOptedOut) return;
+
         console.log(`🎯 Comentário gatilho: ${flow.keyword}`);
         if (flow.reply_comment) {
           await replyComment(mediaId, comment.id, flow.comment_reply);
@@ -386,6 +399,48 @@ async function logDM(userId, flowId, triggerText) {
     );
   } catch (error) {
     console.error("🚨 Erro logDM:", error);
+  }
+}
+
+async function checkOptOut(igUserId) {
+  try {
+    const response = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/autodm_optouts?ig_user_id=eq.${igUserId}`,
+      {
+        headers: {
+          "apikey": process.env.SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
+        }
+      }
+    );
+    const data = await response.json();
+    return data.length > 0;
+  } catch (error) {
+    console.error("🚨 Erro checkOptOut:", error);
+    return false;
+  }
+}
+
+async function addOptOut(igUserId) {
+  try {
+    await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/autodm_optouts`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": process.env.SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          ig_user_id: igUserId,
+          opted_out_at: new Date().toISOString()
+        })
+      }
+    );
+    console.log("✅ Opt-out registrado:", igUserId);
+  } catch (error) {
+    console.error("🚨 Erro addOptOut:", error);
   }
 }
 
@@ -520,6 +575,89 @@ app.post("/autodm/generate-message", async (req, res) => {
     return res.json({ success: true, message: data.content[0].text });
 
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🧠 ANALISAR ESTILO DO USUÁRIO
+app.post("/autodm/analyze-style", async (req, res) => {
+  try {
+    const { captions, user_id, language } = req.body;
+
+    if (!captions) {
+      return res.status(400).json({ error: "Legendas obrigatórias" });
+    }
+
+    const langMap = {
+      "pt": "português brasileiro",
+      "en": "English",
+      "es": "español"
+    };
+    const lang = langMap[language] || "português brasileiro";
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 500,
+        messages: [
+          {
+            role: "user",
+            content: `Analise o estilo de escrita dessas legendas do Instagram em ${lang}:
+
+${captions}
+
+Retorne um JSON com:
+{
+  "tone": "descrição do tom",
+  "emoji_usage": "baixo/moderado/alto",
+  "vocabulary": "simples/técnico/coloquial",
+  "favorite_cta": "exemplo do CTA mais usado",
+  "summary": "resumo do estilo em 1 frase"
+}
+
+Retorne APENAS o JSON, sem explicações.`
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    const analysisText = data.content[0].text;
+    const clean = analysisText.replace(/```json|```/g, "").trim();
+    const analysis = JSON.parse(clean);
+
+    await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/user_styles`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": process.env.SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`,
+          "Prefer": "return=representation"
+        },
+        body: JSON.stringify({
+          user_id,
+          tone: analysis.tone,
+          emoji_usage: analysis.emoji_usage,
+          vocabulary: analysis.vocabulary,
+          favorite_cta: analysis.favorite_cta,
+          raw_analysis: JSON.stringify(analysis)
+        })
+      }
+    );
+
+    console.log("✅ Estilo analisado e salvo");
+    return res.json({ success: true, analysis });
+
+  } catch (error) {
+    console.error("🚨 Erro analyze-style:", error);
     res.status(500).json({ error: error.message });
   }
 });
