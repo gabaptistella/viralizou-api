@@ -319,10 +319,8 @@ app.post("/autodm/flows", async (req, res) => {
       body: JSON.stringify({ user_id, name, trigger_type, keyword, response_message, reply_comment: reply_comment || false, comment_reply: comment_reply || "", send_dm: send_dm || true, status: "active", created_at: new Date().toISOString() })
     });
     const data = await response.json();
-    console.log("✅ Fluxo criado:", data);
     return res.json({ success: true, flow: data });
   } catch (error) {
-    console.error("🚨 Erro criar fluxo:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -357,7 +355,7 @@ app.get("/autodm/stats/:user_id", async (req, res) => {
   }
 });
 
-// 🤖 AUTODM — GERAR MENSAGEM COM CLAUDE
+// 🤖 AUTODM — GERAR MENSAGEM
 app.post("/autodm/generate-message", async (req, res) => {
   try {
     const { keyword, niche, objective, language } = req.body;
@@ -380,7 +378,7 @@ app.post("/autodm/generate-message", async (req, res) => {
   }
 });
 
-// 🧠 ANALISAR ESTILO DO USUÁRIO
+// 🧠 ANALISAR ESTILO
 app.post("/autodm/analyze-style", async (req, res) => {
   try {
     const { captions, user_id, language } = req.body;
@@ -395,7 +393,7 @@ app.post("/autodm/analyze-style", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 500,
-        messages: [{ role: "user", content: `Analise o estilo de escrita dessas legendas do Instagram em ${lang}:\n\n${captions}\n\nRetorne JSON com: {"tone":"...","emoji_usage":"baixo/moderado/alto","vocabulary":"simples/técnico/coloquial","favorite_cta":"...","summary":"..."}. Apenas o JSON.` }]
+        messages: [{ role: "user", content: `Analise o estilo dessas legendas em ${lang}:\n\n${captions}\n\nRetorne JSON: {"tone":"...","emoji_usage":"baixo/moderado/alto","vocabulary":"simples/técnico/coloquial","favorite_cta":"...","summary":"..."}. Apenas JSON.` }]
       })
     });
 
@@ -409,15 +407,13 @@ app.post("/autodm/analyze-style", async (req, res) => {
       body: JSON.stringify({ user_id, tone: analysis.tone, emoji_usage: analysis.emoji_usage, vocabulary: analysis.vocabulary, favorite_cta: analysis.favorite_cta, raw_analysis: JSON.stringify(analysis) })
     });
 
-    console.log("✅ Estilo analisado e salvo");
     return res.json({ success: true, analysis });
   } catch (error) {
-    console.error("🚨 Erro analyze-style:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 🛠️ FERRAMENTAS — GERADOR DE BIO
+// 🛠️ FERRAMENTAS — BIO IA
 app.post("/tools/generate-bio", async (req, res) => {
   try {
     const { niche, diferencial, cta, emojis, language } = req.body;
@@ -430,20 +426,7 @@ app.post("/tools/generate-bio", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 800,
-        messages: [{ role: "user", content: `Crie 5 opções de bio para Instagram em ${lang}.
-Nicho: ${niche}
-Diferencial: ${diferencial}
-CTA desejado: ${cta}
-Usar emojis: ${emojis ? "sim" : "não"}
-
-Regras:
-- Máximo 150 caracteres cada
-- Formato: quem você é + o que faz + CTA
-- Cada bio deve ser diferente
-
-Retorne JSON:
-{"bios": ["bio1", "bio2", "bio3", "bio4", "bio5"]}
-Apenas o JSON.` }]
+        messages: [{ role: "user", content: `Crie 5 opções de bio para Instagram em ${lang}. Nicho: ${niche}. Diferencial: ${diferencial}. CTA: ${cta}. Emojis: ${emojis ? "sim" : "não"}. Max 150 chars cada. Retorne JSON: {"bios":["bio1","bio2","bio3","bio4","bio5"]}. Apenas JSON.` }]
       })
     });
 
@@ -456,7 +439,7 @@ Apenas o JSON.` }]
   }
 });
 
-// 🛠️ FERRAMENTAS — KIT DE LANÇAMENTO
+// 🛠️ FERRAMENTAS — KIT LANÇAMENTO
 app.post("/tools/generate-launch-kit", async (req, res) => {
   try {
     const { product, price, audience, benefit, date, platform, language } = req.body;
@@ -469,23 +452,7 @@ app.post("/tools/generate-launch-kit", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: `Crie um kit completo de lançamento em ${lang}.
-Produto: ${product}
-Preço: ${price}
-Público: ${audience}
-Benefício principal: ${benefit}
-Data de lançamento: ${date}
-Plataforma: ${platform}
-
-Retorne JSON com:
-{
-  "cronograma": [{"dia": 7, "tipo": "post", "conteudo": "..."}],
-  "posts": [{"dia": 1, "hook": "...", "desenvolvimento": "...", "cta": "..."}],
-  "stories": [{"dia": 1, "stories": ["...", "...", "..."]}],
-  "autodm": {"keyword": "...", "mensagens": ["msg1", "msg2", "msg3", "msg4"]},
-  "email": {"assunto": "...", "corpo": "..."}
-}
-Apenas o JSON.` }]
+        messages: [{ role: "user", content: `Crie kit de lançamento em ${lang}. Produto: ${product}. Preço: ${price}. Público: ${audience}. Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}. Retorne JSON: {"cronograma":[{"dia":7,"tipo":"post","conteudo":"..."}],"posts":[{"dia":1,"hook":"...","desenvolvimento":"...","cta":"..."}],"stories":[{"dia":1,"stories":["...","...","..."]}],"autodm":{"keyword":"...","mensagens":["msg1","msg2","msg3","msg4"]},"email":{"assunto":"...","corpo":"..."}}. Apenas JSON.` }]
       })
     });
 
@@ -511,22 +478,7 @@ app.post("/tools/generate-youtube", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1000,
-        messages: [{ role: "user", content: `Crie um pacote completo para YouTube em ${lang}.
-Tema: ${topic}
-Nicho: ${niche}
-Palavra-chave: ${keyword}
-Duração: ${duration} minutos
-
-Retorne JSON:
-{
-  "titulos": ["titulo1", "titulo2", "titulo3", "titulo4", "titulo5"],
-  "descricao": "descrição completa com SEO",
-  "tags": ["tag1", "tag2"],
-  "hashtags": ["#hash1", "#hash2"],
-  "thumbnail": {"texto_principal": "...", "subtexto": "...", "cor_sugerida": "..."},
-  "tela_final": "script dos últimos 20 segundos"
-}
-Apenas o JSON.` }]
+        messages: [{ role: "user", content: `Crie pacote YouTube em ${lang}. Tema: ${topic}. Nicho: ${niche}. Keyword: ${keyword}. Duração: ${duration}min. Retorne JSON: {"titulos":["t1","t2","t3","t4","t5"],"descricao":"...","tags":["tag1"],"hashtags":["#h1"],"thumbnail":{"texto_principal":"...","subtexto":"...","cor_sugerida":"..."},"tela_final":"..."}. Apenas JSON.` }]
       })
     });
 
@@ -552,27 +504,7 @@ app.post("/tools/best-time", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 800,
-        messages: [{ role: "user", content: `Analise o melhor horário para postar em ${lang}.
-Nicho: ${niche}
-País: ${country}
-Plataforma: ${platform}
-Tipo de conteúdo: ${content_type}
-
-Retorne JSON:
-{
-  "calendario": [
-    {"dia": "Segunda", "melhor": "19h", "bom": "12h", "evitar": "6h"},
-    {"dia": "Terça", "melhor": "20h", "bom": "18h", "evitar": "8h"},
-    {"dia": "Quarta", "melhor": "19h", "bom": "21h", "evitar": "7h"},
-    {"dia": "Quinta", "melhor": "18h", "bom": "20h", "evitar": "9h"},
-    {"dia": "Sexta", "melhor": "17h", "bom": "19h", "evitar": "10h"},
-    {"dia": "Sábado", "melhor": "10h", "bom": "15h", "evitar": "22h"},
-    {"dia": "Domingo", "melhor": "11h", "bom": "16h", "evitar": "23h"}
-  ],
-  "insights": "análise geral do comportamento da audiência",
-  "dica_personalizada": "dica específica para o nicho e plataforma"
-}
-Apenas o JSON.` }]
+        messages: [{ role: "user", content: `Analise melhor horário para postar em ${lang}. Nicho: ${niche}. País: ${country}. Plataforma: ${platform}. Tipo: ${content_type}. Retorne JSON: {"calendario":[{"dia":"Segunda","melhor":"19h","bom":"12h","evitar":"6h"},{"dia":"Terça","melhor":"20h","bom":"18h","evitar":"8h"},{"dia":"Quarta","melhor":"19h","bom":"21h","evitar":"7h"},{"dia":"Quinta","melhor":"18h","bom":"20h","evitar":"9h"},{"dia":"Sexta","melhor":"17h","bom":"19h","evitar":"10h"},{"dia":"Sábado","melhor":"10h","bom":"15h","evitar":"22h"},{"dia":"Domingo","melhor":"11h","bom":"16h","evitar":"23h"}],"insights":"...","dica_personalizada":"..."}. Apenas JSON.` }]
       })
     });
 
@@ -585,7 +517,7 @@ Apenas o JSON.` }]
   }
 });
 
-// 🛠️ FERRAMENTAS — GERADOR DE COLLAB
+// 🛠️ FERRAMENTAS — COLLAB
 app.post("/tools/generate-collab", async (req, res) => {
   try {
     const { my_niche, my_followers, partner_username, objective, language } = req.body;
@@ -598,22 +530,7 @@ app.post("/tools/generate-collab", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1000,
-        messages: [{ role: "user", content: `Crie uma estratégia de collab em ${lang}.
-Meu nicho: ${my_niche}
-Meus seguidores: ${my_followers}
-Parceiro: @${partner_username}
-Objetivo: ${objective}
-
-Retorne JSON:
-{
-  "compatibilidade": {"score": 85, "descricao": "..."},
-  "pontos_positivos": ["ponto1", "ponto2", "ponto3"],
-  "formatos_sugeridos": ["formato1", "formato2", "formato3"],
-  "roteiro": "roteiro completo da collab",
-  "dm_abordagem": "mensagem pronta para enviar ao parceiro",
-  "contrato_basico": "pontos principais do acordo"
-}
-Apenas o JSON.` }]
+        messages: [{ role: "user", content: `Crie estratégia de collab em ${lang}. Meu nicho: ${my_niche}. Meus seguidores: ${my_followers}. Parceiro: @${partner_username}. Objetivo: ${objective}. Retorne JSON: {"compatibilidade":{"score":85,"descricao":"..."},"pontos_positivos":["p1","p2","p3"],"formatos_sugeridos":["f1","f2","f3"],"roteiro":"...","dm_abordagem":"...","contrato_basico":"..."}. Apenas JSON.` }]
       })
     });
 
@@ -622,6 +539,110 @@ Apenas o JSON.` }]
     const result = JSON.parse(clean);
     return res.json({ success: true, collab: result });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🎨 GERADOR DE CARROSSEL
+app.post("/tools/generate-carousel", async (req, res) => {
+  try {
+    const { tema, niche, slides_count, style, font, language, formato, finalidade } = req.body;
+
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const styleMap = {
+      "minimal": { cor_fundo: "#FFFFFF", cor_texto: "#000000" },
+      "colorido": { cor_fundo: "#7C3AED", cor_texto: "#FFFFFF" },
+      "dark": { cor_fundo: "#0A0A0F", cor_texto: "#FFFFFF" },
+      "profissional": { cor_fundo: "#1E293B", cor_texto: "#FFFFFF" },
+      "aesthetic": { cor_fundo: "#FDF2F8", cor_texto: "#831843" }
+    };
+
+    const sizeMap = {
+      "quadrado": { width: 1080, height: 1080, ratio: "1:1" },
+      "retrato": { width: 1080, height: 1350, ratio: "4:5" },
+      "stories": { width: 1080, height: 1920, ratio: "9:16" },
+      "paisagem": { width: 1080, height: 566, ratio: "1.91:1" }
+    };
+
+    const cores = styleMap[style] || styleMap["dark"];
+    const size = sizeMap[formato] || sizeMap["quadrado"];
+
+    const finalidadePrompts = {
+      "carrossel": `
+        - Slide 1: capa com hook forte
+        - Slides intermediários: conteúdo em tópicos
+        - Último slide: CTA e conclusão`,
+      "post": `
+        - Apenas 1 slide impactante
+        - Texto curto e direto
+        - Visual limpo`,
+      "stories": `
+        - Cada story independente
+        - Texto mínimo (max 10 palavras)
+        - CTA apenas no último`,
+      "produto": `
+        - Slide 1: nome + headline
+        - Slide 2: 3 benefícios principais
+        - Slide 3: prova social
+        - Slide 4: preço + CTA urgente`
+    };
+
+    const estrutura = finalidadePrompts[finalidade] || finalidadePrompts["carrossel"];
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.
+Tema: ${tema}
+Nicho: ${niche}
+Slides: ${slides_count}
+Formato: ${formato} (${size.width}x${size.height}px)
+Finalidade: ${finalidade}
+
+Estrutura:
+${estrutura}
+
+Regras:
+- Títulos max 5 palavras
+- Max 3 bullet points por slide
+- Um emoji por slide
+
+Retorne JSON:
+{
+  "slides": [
+    {
+      "numero": 1,
+      "titulo": "...",
+      "corpo": "...",
+      "emoji": "🔥",
+      "cor_fundo": "${cores.cor_fundo}",
+      "cor_texto": "${cores.cor_texto}"
+    }
+  ],
+  "legenda": "...",
+  "hashtags": ["..."],
+  "cta": "...",
+  "tamanho": "${size.width}x${size.height}",
+  "formato": "${formato}"
+}
+Apenas o JSON.` }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+
+    console.log("✅ Carrossel gerado:", formato, finalidade);
+    return res.json({ success: true, carousel: result, size });
+
+  } catch (error) {
+    console.error("🚨 Erro generate-carousel:", error);
     res.status(500).json({ error: error.message });
   }
 });
