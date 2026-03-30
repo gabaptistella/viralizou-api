@@ -534,7 +534,7 @@ app.post("/tools/generate-collab", async (req, res) => {
   }
 });
 
-// 🎨 GERADOR DE CARROSSEL
+// 🎨 GERADOR DE CARROSSEL COM IA
 app.post("/tools/generate-carousel", async (req, res) => {
   try {
     const { tema, niche, slides_count, style, font, language, formato, finalidade } = req.body;
@@ -575,7 +575,7 @@ app.post("/tools/generate-carousel", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\n\nEstrutura:\n${estrutura}\n\nRegras:\n- Títulos max 5 palavras\n- Max 3 bullet points por slide\n- Um emoji por slide\n- Para cada slide gere também uma sugestão de imagem em inglês simples para gerar com IA\n\nRetorne JSON:\n{\n"slides": [{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}","image_suggestion":"describe a scene for this slide in english, simple and clear"}],\n"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"\n}\nApenas o JSON.` }]
+        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\n\nEstrutura:\n${estrutura}\n\nRegras:\n- Títulos max 5 palavras\n- Max 3 bullet points por slide\n- Um emoji por slide\n- Para cada slide gere também uma sugestão de imagem em inglês simples\n\nRetorne JSON:\n{\n"slides": [{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}","image_suggestion":"describe scene in english"}],\n"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"\n}\nApenas o JSON.` }]
       })
     });
 
@@ -587,6 +587,98 @@ app.post("/tools/generate-carousel", async (req, res) => {
     return res.json({ success: true, carousel: result, size });
   } catch (error) {
     console.error("🚨 Erro generate-carousel:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 📸 CARROSSEL A PARTIR DE FOTOS
+app.post("/tools/generate-carousel-from-photos", upload.array("photos", 10), async (req, res) => {
+  try {
+    const { context, tone, language } = req.body;
+    const photos = req.files;
+
+    if (!photos || photos.length === 0) {
+      return res.status(400).json({ error: "Fotos obrigatórias" });
+    }
+
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const toneMap = {
+      "inspiracional": "inspirador, motivacional e emocionante",
+      "educativo": "informativo, claro e educativo",
+      "divertido": "descontraído, divertido e leve",
+      "vendas": "persuasivo, focado em conversão e urgência"
+    };
+
+    const toneDesc = toneMap[tone] || toneMap["inspiracional"];
+
+    console.log(`📸 Gerando carrossel de ${photos.length} fotos`);
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 2000,
+        messages: [{
+          role: "user",
+          content: `Crie textos para um carrossel do Instagram em ${lang}.
+
+Contexto/Tema: ${context}
+Tom: ${toneDesc}
+Número de slides: ${photos.length}
+
+Gere título e texto para cada slide.
+Slide 1 deve ser a capa com hook forte.
+Último slide deve ter CTA.
+Cada slide deve ter conteúdo diferente e progressivo.
+
+Retorne JSON:
+{
+  "slides": [
+    {
+      "numero": 1,
+      "titulo": "título curto impactante max 5 palavras",
+      "texto": "texto do slide max 2 frases impactantes",
+      "emoji": "🔥",
+      "cor_texto": "#FFFFFF",
+      "cor_fundo_overlay": "rgba(0,0,0,0.5)"
+    }
+  ],
+  "legenda": "legenda completa para Instagram com emojis e quebras de linha",
+  "hashtags": ["#hash1", "#hash2", "#hash3"],
+  "cta": "call to action final"
+}
+Apenas JSON.`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+
+    // Converte fotos para base64 para retornar ao frontend
+    const photosBase64 = photos.map((photo, index) => ({
+      index,
+      base64: `data:${photo.mimetype};base64,${photo.buffer.toString("base64")}`,
+      filename: photo.originalname
+    }));
+
+    console.log("✅ Carrossel de fotos gerado com sucesso");
+    return res.json({
+      success: true,
+      slides: result.slides,
+      photos: photosBase64,
+      legenda: result.legenda,
+      hashtags: result.hashtags,
+      cta: result.cta,
+      total_photos: photos.length
+    });
+
+  } catch (error) {
+    console.error("🚨 Erro carousel-from-photos:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -608,14 +700,11 @@ app.post("/tools/generate-image", async (req, res) => {
     const styleAdd = stylePrompts[style] || stylePrompts["digital"];
     const fullPrompt = `${prompt}, ${styleAdd}, purple and cyan color palette, dark background, modern, high quality, professional, 1080x1080 square format`;
 
-    console.log("🎨 Gerando imagem DALL-E:", fullPrompt.substring(0, 100));
+    console.log("🎨 Gerando imagem DALL-E");
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-      },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: "dall-e-3",
         prompt: fullPrompt,
@@ -723,6 +812,77 @@ app.get("/analytics/usage/:user_id", async (req, res) => {
     const data = await response.json();
     return res.json({ success: true, analises_usadas: data.length, mes_ano: mesAno });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 📊 ADMIN — MÉTRICAS
+app.get("/admin/metrics", async (req, res) => {
+  try {
+    // Buscar total de usuários
+    const usersResponse = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/profiles?select=count`,
+      { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`, "Prefer": "count=exact" } }
+    );
+
+    // Buscar planos
+    const subsResponse = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/subscriptions?select=plan,status`,
+      { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
+    );
+
+    const subs = await subsResponse.json();
+
+    // Calcular MRR
+    const planPrices = {
+      "creator": 39.90,
+      "business": 79.90,
+      "agency": 167.90,
+      "free": 0
+    };
+
+    let mrr = 0;
+    let paidUsers = 0;
+    let freeUsers = 0;
+    const planCount = { creator: 0, business: 0, agency: 0, free: 0 };
+
+    if (Array.isArray(subs)) {
+      subs.forEach(sub => {
+        if (sub.status === "active") {
+          const plan = sub.plan || "free";
+          planCount[plan] = (planCount[plan] || 0) + 1;
+          mrr += planPrices[plan] || 0;
+          if (plan !== "free") paidUsers++;
+          else freeUsers++;
+        }
+      });
+    }
+
+    const totalUsers = paidUsers + freeUsers;
+    const metaAnual = 1000000;
+    const arrAtual = mrr * 12;
+    const progressoPercent = (arrAtual / metaAnual * 100).toFixed(2);
+    const faltaParaMeta = metaAnual - arrAtual;
+    const usuariosPagosNecessarios = Math.ceil(faltaParaMeta / (39.90 * 12));
+
+    console.log("✅ Métricas admin calculadas");
+    return res.json({
+      success: true,
+      metrics: {
+        total_users: totalUsers,
+        paid_users: paidUsers,
+        free_users: freeUsers,
+        mrr: mrr.toFixed(2),
+        arr: arrAtual.toFixed(2),
+        meta_anual: metaAnual,
+        progresso_percent: progressoPercent,
+        falta_para_meta: faltaParaMeta.toFixed(2),
+        usuarios_pagos_necessarios: usuariosPagosNecessarios,
+        plan_breakdown: planCount
+      }
+    });
+  } catch (error) {
+    console.error("🚨 Erro admin metrics:", error);
     res.status(500).json({ error: error.message });
   }
 });
