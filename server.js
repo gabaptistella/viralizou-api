@@ -575,7 +575,7 @@ app.post("/tools/generate-carousel", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\n\nEstrutura:\n${estrutura}\n\nRegras:\n- Títulos max 5 palavras\n- Max 3 bullet points por slide\n- Um emoji por slide\n\nRetorne JSON:\n{\n"slides": [{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}"}],\n"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"\n}\nApenas o JSON.` }]
+        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\n\nEstrutura:\n${estrutura}\n\nRegras:\n- Títulos max 5 palavras\n- Max 3 bullet points por slide\n- Um emoji por slide\n- Para cada slide gere também uma sugestão de imagem em inglês simples para gerar com IA\n\nRetorne JSON:\n{\n"slides": [{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}","image_suggestion":"describe a scene for this slide in english, simple and clear"}],\n"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"\n}\nApenas o JSON.` }]
       })
     });
 
@@ -587,6 +587,61 @@ app.post("/tools/generate-carousel", async (req, res) => {
     return res.json({ success: true, carousel: result, size });
   } catch (error) {
     console.error("🚨 Erro generate-carousel:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🎨 GERAR IMAGEM COM DALL-E
+app.post("/tools/generate-image", async (req, res) => {
+  try {
+    const { prompt, style } = req.body;
+    if (!prompt) return res.status(400).json({ error: "Prompt obrigatório" });
+
+    const stylePrompts = {
+      "realista": "photorealistic, high quality, professional photography",
+      "ilustracao": "digital illustration, flat design, colorful",
+      "digital": "3D render, cinema 4D, octane render, professional digital art",
+      "minimalista": "minimalist, clean, simple, modern design",
+      "cartoon": "cartoon style, fun, colorful, animated illustration"
+    };
+
+    const styleAdd = stylePrompts[style] || stylePrompts["digital"];
+    const fullPrompt = `${prompt}, ${styleAdd}, purple and cyan color palette, dark background, modern, high quality, professional, 1080x1080 square format`;
+
+    console.log("🎨 Gerando imagem DALL-E:", fullPrompt.substring(0, 100));
+
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: fullPrompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+        response_format: "url"
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.data?.[0]?.url) {
+      console.log("❌ DALL-E erro:", data);
+      return res.status(500).json({ error: "Erro ao gerar imagem", raw: data });
+    }
+
+    console.log("✅ Imagem gerada com sucesso");
+    return res.json({
+      success: true,
+      image_url: data.data[0].url,
+      revised_prompt: data.data[0].revised_prompt
+    });
+
+  } catch (error) {
+    console.error("🚨 Erro generate-image:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -612,7 +667,6 @@ app.post("/analytics/analyze-profile", async (req, res) => {
     const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const analysis = JSON.parse(clean);
 
-    // Salvar uso no Supabase
     await fetch(`${process.env.SUPABASE_URL}/rest/v1/analytics_usage`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
