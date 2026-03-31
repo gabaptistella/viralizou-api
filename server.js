@@ -32,7 +32,6 @@ app.post("/generate-reel", async (req, res) => {
 
     const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
-    console.log(`🚀 Gerando em ${lang}...`);
 
     const openaiPromise = fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -59,16 +58,13 @@ app.post("/generate-reel", async (req, res) => {
     const result = await Promise.any([openaiPromise, claudePromise]);
 
     if (result.choices) {
-      console.log("✅ Respondeu: OpenAI");
       return res.json({ success: true, provider: "openai", language: lang, roteiro: result.choices[0].message.content });
     }
     if (result.content) {
-      console.log("✅ Respondeu: Claude");
       return res.json({ success: true, provider: "claude", language: lang, roteiro: result.content[0].text });
     }
     return res.status(500).json({ error: "Nenhum provider respondeu corretamente" });
   } catch (error) {
-    console.error("🚨 Erro geral:", error);
     res.status(500).json({ error: "Erro interno", details: error.message });
   }
 });
@@ -77,7 +73,6 @@ app.post("/generate-reel", async (req, res) => {
 app.post("/transcribe", upload.single("audio"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Arquivo de áudio obrigatório" });
-    console.log("🎙️ Transcrevendo:", req.file.originalname);
 
     const formData = new FormData();
     formData.append("file", req.file.buffer, { filename: req.file.originalname, contentType: req.file.mimetype });
@@ -93,10 +88,8 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
     const data = await response.json();
     if (!data.text) return res.status(500).json({ error: "Erro na transcrição", raw: data });
 
-    console.log("✅ Transcrição concluída");
     return res.json({ success: true, text: data.text });
   } catch (error) {
-    console.error("🚨 Erro Whisper:", error);
     res.status(500).json({ error: "Erro interno", details: error.message });
   }
 });
@@ -117,7 +110,6 @@ app.post("/text-to-speech", async (req, res) => {
     };
 
     const voiceId = voiceMap[voice] || voiceMap["pt_female"];
-    console.log(`🎙️ Gerando voz: ${voice}`);
 
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: "POST",
@@ -136,10 +128,8 @@ app.post("/text-to-speech", async (req, res) => {
 
     const audioBuffer = await response.buffer();
     const audioBase64 = audioBuffer.toString("base64");
-    console.log("✅ Voz gerada com sucesso");
     return res.json({ success: true, audio: audioBase64, format: "mp3" });
   } catch (error) {
-    console.error("🚨 Erro ElevenLabs:", error);
     res.status(500).json({ error: "Erro interno", details: error.message });
   }
 });
@@ -151,7 +141,6 @@ app.get("/ig-webhook", (req, res) => {
   const challenge = req.query["hub.challenge"];
   const VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN || "viralizou2026";
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("✅ Webhook verificado!");
     return res.status(200).send(challenge);
   }
   return res.status(403).json({ error: "Token inválido" });
@@ -170,7 +159,6 @@ app.post("/ig-webhook", async (req, res) => {
     }
     return res.status(200).json({ status: "ok" });
   } catch (error) {
-    console.error("🚨 Webhook erro:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -183,7 +171,7 @@ async function processIGEvent(event) {
 
     if (["parar", "stop", "unsubscribe"].includes(message)) {
       await addOptOut(senderId);
-      await sendIGDM(senderId, "Você foi removido da lista. Não receberá mais mensagens automáticas ✅");
+      await sendIGDM(senderId, "Você foi removido da lista ✅");
       return;
     }
 
@@ -258,7 +246,6 @@ async function getActiveFlows(trigger_type) {
     );
     return await response.json();
   } catch (error) {
-    console.error("🚨 Erro getActiveFlows:", error);
     return [];
   }
 }
@@ -430,28 +417,176 @@ app.post("/tools/generate-bio", async (req, res) => {
   }
 });
 
-// 🛠️ FERRAMENTAS — KIT LANÇAMENTO
+// 🛠️ FERRAMENTAS — KIT LANÇAMENTO POR PLANO
 app.post("/tools/generate-launch-kit", async (req, res) => {
   try {
-    const { product, price, audience, benefit, date, platform, language } = req.body;
+    const { product, price, audience, benefit, date, platform, language, plan } = req.body;
     const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
+
+    // Configurar por plano
+    const planConfig = {
+      "free": null, // Sem acesso
+      "creator": {
+        max_tokens: 1500,
+        dias: 3,
+        posts: 3,
+        stories: 3,
+        label: "Kit Básico (3 dias)"
+      },
+      "business": {
+        max_tokens: 2500,
+        dias: 7,
+        posts: 7,
+        stories: 10,
+        label: "Kit Completo (7 dias)"
+      },
+      "agency": {
+        max_tokens: 4000,
+        dias: 14,
+        posts: 14,
+        stories: 21,
+        label: "Kit Premium (14 dias)"
+      }
+    };
+
+    const userPlan = plan || "creator";
+
+    if (userPlan === "free") {
+      return res.status(403).json({
+        error: "Kit de Lançamento disponível a partir do plano Creator",
+        upgrade_required: true
+      });
+    }
+
+    const config = planConfig[userPlan] || planConfig["creator"];
+
+    const promptByPlan = {
+      "creator": `Crie kit de lançamento BÁSICO em ${lang} para ${config.dias} dias.
+Produto: ${product}. Preço: ${price}. Público: ${audience}. 
+Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
+
+Retorne JSON COMPACTO e VÁLIDO:
+{
+  "label": "${config.label}",
+  "cronograma": [
+    {"dia": 3, "tipo": "teaser", "conteudo": "..."},
+    {"dia": 1, "tipo": "lançamento", "conteudo": "..."},
+    {"dia": 0, "tipo": "ultimo_dia", "conteudo": "..."}
+  ],
+  "posts": [
+    {"dia": 3, "hook": "...", "cta": "..."},
+    {"dia": 1, "hook": "...", "cta": "..."},
+    {"dia": 0, "hook": "...", "cta": "..."}
+  ],
+  "stories": [
+    {"dia": 3, "texto": "..."},
+    {"dia": 1, "texto": "..."},
+    {"dia": 0, "texto": "..."}
+  ],
+  "autodm": {"keyword": "...", "mensagem": "..."},
+  "hashtags": ["#h1", "#h2", "#h3"]
+}
+Apenas JSON válido e completo.`,
+
+      "business": `Crie kit de lançamento COMPLETO em ${lang} para ${config.dias} dias.
+Produto: ${product}. Preço: ${price}. Público: ${audience}.
+Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
+
+Retorne JSON VÁLIDO:
+{
+  "label": "${config.label}",
+  "cronograma": [
+    {"dia": 7, "tipo": "aquecimento", "conteudo": "..."},
+    {"dia": 5, "tipo": "prova_social", "conteudo": "..."},
+    {"dia": 3, "tipo": "teaser", "conteudo": "..."},
+    {"dia": 1, "tipo": "lancamento", "conteudo": "..."},
+    {"dia": 0, "tipo": "ultimo_dia", "conteudo": "..."}
+  ],
+  "posts": [
+    {"dia": 7, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 5, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 3, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 1, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 0, "hook": "...", "desenvolvimento": "...", "cta": "..."}
+  ],
+  "stories": [
+    {"dia": 7, "stories": ["...", "...", "..."]},
+    {"dia": 3, "stories": ["...", "...", "..."]},
+    {"dia": 1, "stories": ["...", "...", "..."]},
+    {"dia": 0, "stories": ["...", "..."]}
+  ],
+  "autodm": {
+    "keyword": "...",
+    "mensagens": ["msg1", "msg2", "msg3"]
+  },
+  "email": {"assunto": "...", "corpo": "..."},
+  "hashtags": ["#h1", "#h2", "#h3", "#h4", "#h5"]
+}
+Apenas JSON válido e completo.`,
+
+      "agency": `Crie kit de lançamento PREMIUM em ${lang} para ${config.dias} dias.
+Produto: ${product}. Preço: ${price}. Público: ${audience}.
+Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
+
+Retorne JSON VÁLIDO:
+{
+  "label": "${config.label}",
+  "cronograma": [
+    {"dia": 14, "tipo": "pre_aquecimento", "conteudo": "..."},
+    {"dia": 10, "tipo": "aquecimento", "conteudo": "..."},
+    {"dia": 7, "tipo": "prova_social", "conteudo": "..."},
+    {"dia": 5, "tipo": "teaser", "conteudo": "..."},
+    {"dia": 3, "tipo": "urgencia", "conteudo": "..."},
+    {"dia": 1, "tipo": "lancamento", "conteudo": "..."},
+    {"dia": 0, "tipo": "ultimo_dia", "conteudo": "..."}
+  ],
+  "posts": [
+    {"dia": 14, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 10, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 7, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 5, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 3, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 1, "hook": "...", "desenvolvimento": "...", "cta": "..."},
+    {"dia": 0, "hook": "...", "desenvolvimento": "...", "cta": "..."}
+  ],
+  "stories": [
+    {"dia": 14, "stories": ["...", "...", "..."]},
+    {"dia": 10, "stories": ["...", "...", "..."]},
+    {"dia": 7, "stories": ["...", "...", "..."]},
+    {"dia": 5, "stories": ["...", "...", "..."]},
+    {"dia": 3, "stories": ["...", "...", "..."]},
+    {"dia": 1, "stories": ["...", "...", "..."]},
+    {"dia": 0, "stories": ["...", "..."]}
+  ],
+  "autodm": {
+    "keyword": "...",
+    "mensagens": ["msg1", "msg2", "msg3", "msg4"]
+  },
+  "email": {"assunto": "...", "corpo": "..."},
+  "script_youtube": "...",
+  "roteiro_live": "...",
+  "hashtags": ["#h1", "#h2", "#h3", "#h4", "#h5"]
+}
+Apenas JSON válido e completo.`
+    };
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: `Crie kit de lançamento em ${lang}. Produto: ${product}. Preço: ${price}. Público: ${audience}. Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}. Retorne JSON: {"cronograma":[{"dia":7,"tipo":"post","conteudo":"..."}],"posts":[{"dia":1,"hook":"...","desenvolvimento":"...","cta":"..."}],"stories":[{"dia":1,"stories":["...","...","..."]}],"autodm":{"keyword":"...","mensagens":["msg1","msg2","msg3","msg4"]},"email":{"assunto":"...","corpo":"..."}}. Apenas JSON.` }]
+        max_tokens: config.max_tokens,
+        messages: [{ role: "user", content: promptByPlan[userPlan] }]
       })
     });
 
     const data = await response.json();
     const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(clean);
-    return res.json({ success: true, kit: result });
+    return res.json({ success: true, plan: userPlan, kit: result });
   } catch (error) {
+    console.error("🚨 Erro launch kit:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -561,10 +696,10 @@ app.post("/tools/generate-carousel", async (req, res) => {
     const size = sizeMap[formato] || sizeMap["quadrado"];
 
     const finalidadePrompts = {
-      "carrossel": `- Slide 1: capa com hook forte\n- Slides intermediários: conteúdo em tópicos\n- Último slide: CTA e conclusão`,
-      "post": `- Apenas 1 slide impactante\n- Texto curto e direto\n- Visual limpo`,
-      "stories": `- Cada story independente\n- Texto mínimo (max 10 palavras)\n- CTA apenas no último`,
-      "produto": `- Slide 1: nome + headline\n- Slide 2: 3 benefícios\n- Slide 3: prova social\n- Slide 4: preço + CTA urgente`
+      "carrossel": `- Slide 1: capa com hook forte\n- Slides intermediários: conteúdo em tópicos\n- Último slide: CTA`,
+      "post": `- Apenas 1 slide impactante\n- Texto curto e direto`,
+      "stories": `- Cada story independente\n- Texto mínimo\n- CTA no último`,
+      "produto": `- Slide 1: headline\n- Slide 2: benefícios\n- Slide 3: prova social\n- Slide 4: preço + CTA`
     };
 
     const estrutura = finalidadePrompts[finalidade] || finalidadePrompts["carrossel"];
@@ -575,7 +710,7 @@ app.post("/tools/generate-carousel", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\n\nEstrutura:\n${estrutura}\n\nRegras:\n- Títulos max 5 palavras\n- Max 3 bullet points por slide\n- Um emoji por slide\n- Para cada slide gere também uma sugestão de imagem em inglês simples\n\nRetorne JSON:\n{\n"slides": [{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}","image_suggestion":"describe scene in english"}],\n"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"\n}\nApenas o JSON.` }]
+        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\n\nEstrutura:\n${estrutura}\n\nRegras:\n- Títulos max 5 palavras\n- Max 3 bullet points por slide\n- Um emoji por slide\n- Sugestão de imagem em inglês por slide\n\nRetorne JSON:\n{\n"slides":[{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}","image_suggestion":"..."}],\n"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"\n}\nApenas JSON válido.` }]
       })
     });
 
@@ -583,7 +718,6 @@ app.post("/tools/generate-carousel", async (req, res) => {
     const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(clean);
 
-    console.log("✅ Carrossel gerado:", formato, finalidade);
     return res.json({ success: true, carousel: result, size });
   } catch (error) {
     console.error("🚨 Erro generate-carousel:", error);
@@ -613,8 +747,6 @@ app.post("/tools/generate-carousel-from-photos", upload.array("photos", 10), asy
 
     const toneDesc = toneMap[tone] || toneMap["inspiracional"];
 
-    console.log(`📸 Gerando carrossel de ${photos.length} fotos`);
-
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
@@ -623,34 +755,31 @@ app.post("/tools/generate-carousel-from-photos", upload.array("photos", 10), asy
         max_tokens: 2000,
         messages: [{
           role: "user",
-          content: `Crie textos para um carrossel do Instagram em ${lang}.
-
-Contexto/Tema: ${context}
+          content: `Crie textos para carrossel do Instagram em ${lang}.
+Contexto: ${context}
 Tom: ${toneDesc}
 Número de slides: ${photos.length}
 
-Gere título e texto para cada slide.
-Slide 1 deve ser a capa com hook forte.
-Último slide deve ter CTA.
-Cada slide deve ter conteúdo diferente e progressivo.
+Slide 1 = capa com hook forte.
+Último slide = CTA.
 
 Retorne JSON:
 {
   "slides": [
     {
       "numero": 1,
-      "titulo": "título curto impactante max 5 palavras",
-      "texto": "texto do slide max 2 frases impactantes",
+      "titulo": "título max 5 palavras",
+      "texto": "max 2 frases",
       "emoji": "🔥",
       "cor_texto": "#FFFFFF",
       "cor_fundo_overlay": "rgba(0,0,0,0.5)"
     }
   ],
-  "legenda": "legenda completa para Instagram com emojis e quebras de linha",
-  "hashtags": ["#hash1", "#hash2", "#hash3"],
-  "cta": "call to action final"
+  "legenda": "legenda completa com emojis",
+  "hashtags": ["#hash1", "#hash2"],
+  "cta": "call to action"
 }
-Apenas JSON.`
+Apenas JSON válido.`
         }]
       })
     });
@@ -659,14 +788,12 @@ Apenas JSON.`
     const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(clean);
 
-    // Converte fotos para base64 para retornar ao frontend
     const photosBase64 = photos.map((photo, index) => ({
       index,
       base64: `data:${photo.mimetype};base64,${photo.buffer.toString("base64")}`,
       filename: photo.originalname
     }));
 
-    console.log("✅ Carrossel de fotos gerado com sucesso");
     return res.json({
       success: true,
       slides: result.slides,
@@ -692,15 +819,13 @@ app.post("/tools/generate-image", async (req, res) => {
     const stylePrompts = {
       "realista": "photorealistic, high quality, professional photography",
       "ilustracao": "digital illustration, flat design, colorful",
-      "digital": "3D render, cinema 4D, octane render, professional digital art",
+      "digital": "3D render, cinema 4D, professional digital art",
       "minimalista": "minimalist, clean, simple, modern design",
       "cartoon": "cartoon style, fun, colorful, animated illustration"
     };
 
     const styleAdd = stylePrompts[style] || stylePrompts["digital"];
-    const fullPrompt = `${prompt}, ${styleAdd}, purple and cyan color palette, dark background, modern, high quality, professional, 1080x1080 square format`;
-
-    console.log("🎨 Gerando imagem DALL-E");
+    const fullPrompt = `${prompt}, ${styleAdd}, purple and cyan color palette, dark background, modern, high quality, 1080x1080`;
 
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
@@ -718,11 +843,9 @@ app.post("/tools/generate-image", async (req, res) => {
     const data = await response.json();
 
     if (!data.data?.[0]?.url) {
-      console.log("❌ DALL-E erro:", data);
       return res.status(500).json({ error: "Erro ao gerar imagem", raw: data });
     }
 
-    console.log("✅ Imagem gerada com sucesso");
     return res.json({
       success: true,
       image_url: data.data[0].url,
@@ -748,7 +871,7 @@ app.post("/analytics/analyze-profile", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1000,
-        messages: [{ role: "user", content: `Analise esse perfil do Instagram em ${lang} e gere insights realistas:\n\nUsername: @${username}\n\nRetorne JSON:\n{\n"score":78,"score_label":"Muito bom","engagement_rate":4.2,"engagement_label":"Acima da média","crescimento_mensal":"+2.3k","melhor_horario":"Terça e Quinta às 19h","tipo_conteudo_top":"Reels","insights":["insight1","insight2","insight3"],"sugestoes":["sugestao1","sugestao2","sugestao3"],"score_breakdown":{"engajamento":85,"crescimento":70,"consistencia":75,"qualidade":80},"posts_patrocinados_estimativa":2,"valor_publi_estimado":"R$500-2000"\n}\nApenas JSON.` }]
+        messages: [{ role: "user", content: `Analise esse perfil do Instagram em ${lang}:\n\nUsername: @${username}\n\nRetorne JSON:\n{"score":78,"score_label":"Muito bom","engagement_rate":4.2,"engagement_label":"Acima da média","crescimento_mensal":"+2.3k","melhor_horario":"Terça e Quinta às 19h","tipo_conteudo_top":"Reels","insights":["insight1","insight2","insight3"],"sugestoes":["sugestao1","sugestao2","sugestao3"],"score_breakdown":{"engajamento":85,"crescimento":70,"consistencia":75,"qualidade":80},"posts_patrocinados_estimativa":2,"valor_publi_estimado":"R$500-2000"}\nApenas JSON.` }]
       })
     });
 
@@ -762,7 +885,6 @@ app.post("/analytics/analyze-profile", async (req, res) => {
       body: JSON.stringify({ user_id, username_analyzed: username, type: "profile", created_at: new Date().toISOString() })
     });
 
-    console.log("✅ Perfil analisado:", username);
     return res.json({ success: true, username, analysis });
   } catch (error) {
     console.error("🚨 Erro analyze-profile:", error);
@@ -783,7 +905,7 @@ app.post("/analytics/analyze-competitor", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1500,
-        messages: [{ role: "user", content: `Analise esse concorrente do Instagram e compare com meu perfil em ${lang}:\n\nMeu perfil: @${my_username} (${my_followers} seguidores)\nConcorrente: @${username}\n\nRetorne JSON:\n{\n"competitor":{"username":"${username}","score":71,"followers_estimate":"50k-100k","engagement_rate":2.8,"posts_per_week":4,"melhor_horario":"20h","niche":"Fitness","top_hashtags":["#fitness","#saude"],"sponsored_posts_estimate":3,"valor_publi_estimado":"R$500-2000"},\n"benchmarking":{"engajamento":{"eu":4.2,"concorrente":2.8,"vencedor":"eu"},"crescimento":{"eu":"+2.3k/mês","concorrente":"+1.1k/mês","vencedor":"eu"},"consistencia":{"eu":"3x/semana","concorrente":"4x/semana","vencedor":"concorrente"}},\n"analise_geral":"análise completa","sugestoes_para_superar":["s1","s2","s3"],"pontos_fortes_concorrente":["p1","p2"],"oportunidades":["o1","o2"]\n}\nApenas JSON.` }]
+        messages: [{ role: "user", content: `Analise concorrente do Instagram em ${lang}.\nMeu perfil: @${my_username} (${my_followers} seguidores)\nConcorrente: @${username}\n\nRetorne JSON:\n{"competitor":{"username":"${username}","score":71,"followers_estimate":"50k-100k","engagement_rate":2.8,"posts_per_week":4,"melhor_horario":"20h","niche":"Fitness","top_hashtags":["#fitness","#saude"],"sponsored_posts_estimate":3,"valor_publi_estimado":"R$500-2000"},"benchmarking":{"engajamento":{"eu":4.2,"concorrente":2.8,"vencedor":"eu"},"crescimento":{"eu":"+2.3k/mês","concorrente":"+1.1k/mês","vencedor":"eu"},"consistencia":{"eu":"3x/semana","concorrente":"4x/semana","vencedor":"concorrente"}},"analise_geral":"...","sugestoes_para_superar":["s1","s2","s3"],"pontos_fortes_concorrente":["p1","p2"],"oportunidades":["o1","o2"]}\nApenas JSON.` }]
       })
     });
 
@@ -791,7 +913,6 @@ app.post("/analytics/analyze-competitor", async (req, res) => {
     const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(clean);
 
-    console.log("✅ Concorrente analisado:", username);
     return res.json({ success: true, competitor_analysis: result });
   } catch (error) {
     console.error("🚨 Erro analyze-competitor:", error);
@@ -816,16 +937,9 @@ app.get("/analytics/usage/:user_id", async (req, res) => {
   }
 });
 
-// 📊 ADMIN — MÉTRICAS
+// 👑 ADMIN — MÉTRICAS
 app.get("/admin/metrics", async (req, res) => {
   try {
-    // Buscar total de usuários
-    const usersResponse = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/profiles?select=count`,
-      { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}`, "Prefer": "count=exact" } }
-    );
-
-    // Buscar planos
     const subsResponse = await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/subscriptions?select=plan,status`,
       { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
@@ -833,7 +947,6 @@ app.get("/admin/metrics", async (req, res) => {
 
     const subs = await subsResponse.json();
 
-    // Calcular MRR
     const planPrices = {
       "creator": 39.90,
       "business": 79.90,
@@ -865,7 +978,6 @@ app.get("/admin/metrics", async (req, res) => {
     const faltaParaMeta = metaAnual - arrAtual;
     const usuariosPagosNecessarios = Math.ceil(faltaParaMeta / (39.90 * 12));
 
-    console.log("✅ Métricas admin calculadas");
     return res.json({
       success: true,
       metrics: {
