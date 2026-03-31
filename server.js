@@ -3,6 +3,7 @@ const cors = require("cors");
 const fetch = require("node-fetch");
 const multer = require("multer");
 const FormData = require("form-data");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const upload = multer({ 
@@ -18,6 +19,7 @@ const PORT = process.env.PORT || 3000;
 console.log("🔑 Claude key:", process.env.ANTHROPIC_API_KEY ? "OK ✅" : "UNDEFINED ❌");
 console.log("🔑 OpenAI key:", process.env.OPENAI_API_KEY ? "OK ✅" : "UNDEFINED ❌");
 console.log("🔑 ElevenLabs key:", process.env.ELEVENLABS_API_KEY ? "OK ✅" : "UNDEFINED ❌");
+console.log("🔑 Google AI key:", process.env.GOOGLE_AI_KEY ? "OK ✅" : "UNDEFINED ❌");
 console.log("🔑 IG Token:", process.env.IG_ACCESS_TOKEN ? "OK ✅" : "UNDEFINED ❌");
 
 app.get("/", (req, res) => {
@@ -199,7 +201,7 @@ async function processComment(comment) {
 
     const flows = await getActiveFlows("comment_keyword");
     for (const flow of flows) {
-      const matches = flow.trigger_type === "any_comment" || 
+      const matches = flow.trigger_type === "any_comment" ||
                       text.includes(flow.keyword?.toLowerCase());
       if (matches) {
         const isOptedOut = await checkOptOut(userId);
@@ -251,13 +253,12 @@ async function getActiveFlows(trigger_type) {
       { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
     );
     const flows = await response.json();
-    return Array.isArray(flows) ? flows.filter(f => 
-      f.trigger_type === trigger_type || 
-      f.trigger_type === "any" || 
+    return Array.isArray(flows) ? flows.filter(f =>
+      f.trigger_type === trigger_type ||
+      f.trigger_type === "any" ||
       f.trigger_type === "any_comment"
     ) : [];
   } catch (error) {
-    console.error("🚨 Erro getActiveFlows:", error);
     return [];
   }
 }
@@ -306,16 +307,16 @@ app.post("/autodm/flows", async (req, res) => {
     const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/autodm_flows`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ 
-        user_id, name, trigger_type, keyword, response_message, 
-        reply_comment: reply_comment || false, 
+      body: JSON.stringify({
+        user_id, name, trigger_type, keyword, response_message,
+        reply_comment: reply_comment || false,
         comment_replies: comment_replies ? JSON.stringify(comment_replies) : null,
-        send_dm: send_dm || true, 
+        send_dm: send_dm || true,
         target_post: target_post || "any",
         delay_seconds: delay_seconds || 0,
         multilingual: multilingual || false,
-        status: "active", 
-        created_at: new Date().toISOString() 
+        status: "active",
+        created_at: new Date().toISOString()
       })
     });
     const data = await response.json();
@@ -340,14 +341,14 @@ app.get("/autodm/flows/:user_id", async (req, res) => {
   }
 });
 
-// 📊 AUTODM — ATUALIZAR STATUS DO FLUXO
+// 📊 AUTODM — ATUALIZAR STATUS
 app.patch("/autodm/flows/:flow_id", async (req, res) => {
   try {
     const { flow_id } = req.params;
     const { status } = req.body;
-    const response = await fetch(
+    await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/autodm_flows?id=eq.${flow_id}`,
-      { 
+      {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
         body: JSON.stringify({ status, updated_at: new Date().toISOString() })
@@ -364,7 +365,7 @@ app.get("/autodm/stats/:user_id", async (req, res) => {
   try {
     const { user_id } = req.params;
     const response = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/autodm_logs?select=*,autodm_flows!inner(user_id)&autodm_flows.user_id=eq.${user_id}`,
+      `${process.env.SUPABASE_URL}/rest/v1/autodm_logs?select=*`,
       { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
     );
     const logs = await response.json();
@@ -374,7 +375,7 @@ app.get("/autodm/stats/:user_id", async (req, res) => {
   }
 });
 
-// 🤖 AUTODM — GERAR MENSAGEM COM IA
+// 🤖 AUTODM — GERAR MENSAGEM
 app.post("/autodm/generate-message", async (req, res) => {
   try {
     const { keyword, niche, objective, language, style } = req.body;
@@ -397,7 +398,7 @@ app.post("/autodm/generate-message", async (req, res) => {
   }
 });
 
-// 🤖 AUTODM — GERAR FLUXO COMPLETO COM IA
+// 🤖 AUTODM — GERAR FLUXO COMPLETO
 app.post("/autodm/generate-flow", async (req, res) => {
   try {
     const { product, objective, tone, language } = req.body;
@@ -422,11 +423,9 @@ app.post("/autodm/generate-flow", async (req, res) => {
         messages: [{
           role: "user",
           content: `Crie um fluxo completo de AutoDM para Instagram em ${lang}.
-
 Produto/Serviço: ${product}
 Objetivo: ${objective}
 Tom: ${toneDesc}
-
 Retorne JSON:
 {
   "mensagem_1": "mensagem inicial max 3 frases com {nome}",
@@ -452,11 +451,8 @@ Apenas JSON.`
     const data = await response.json();
     const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(clean);
-
-    console.log("✅ Fluxo AutoDM gerado com IA");
     return res.json({ success: true, flow: result });
   } catch (error) {
-    console.error("🚨 Erro generate-flow:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -537,12 +533,8 @@ app.post("/tools/generate-launch-kit", async (req, res) => {
     };
 
     const userPlan = plan || "creator";
-
     if (userPlan === "free") {
-      return res.status(403).json({
-        error: "Kit de Lançamento disponível a partir do plano Creator",
-        upgrade_required: true
-      });
+      return res.status(403).json({ error: "Kit de Lançamento disponível a partir do plano Creator", upgrade_required: true });
     }
 
     const config = planConfig[userPlan] || planConfig["creator"];
@@ -552,98 +544,19 @@ app.post("/tools/generate-launch-kit", async (req, res) => {
 Produto: ${product}. Preço: ${price}. Público: ${audience}.
 Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
 Retorne JSON VÁLIDO:
-{
-  "label": "Kit Básico (3 dias)",
-  "cronograma": [
-    {"dia": 3, "tipo": "teaser", "conteudo": "..."},
-    {"dia": 1, "tipo": "lancamento", "conteudo": "..."},
-    {"dia": 0, "tipo": "ultimo_dia", "conteudo": "..."}
-  ],
-  "posts": [
-    {"dia": 3, "hook": "...", "cta": "..."},
-    {"dia": 1, "hook": "...", "cta": "..."},
-    {"dia": 0, "hook": "...", "cta": "..."}
-  ],
-  "stories": [
-    {"dia": 3, "texto": "..."},
-    {"dia": 1, "texto": "..."},
-    {"dia": 0, "texto": "..."}
-  ],
-  "autodm": {"keyword": "...", "mensagem": "..."},
-  "hashtags": ["#h1", "#h2", "#h3"]
-}
+{"label":"Kit Básico (3 dias)","cronograma":[{"dia":3,"tipo":"teaser","conteudo":"..."},{"dia":1,"tipo":"lancamento","conteudo":"..."},{"dia":0,"tipo":"ultimo_dia","conteudo":"..."}],"posts":[{"dia":3,"hook":"...","cta":"..."},{"dia":1,"hook":"...","cta":"..."},{"dia":0,"hook":"...","cta":"..."}],"stories":[{"dia":3,"texto":"..."},{"dia":1,"texto":"..."},{"dia":0,"texto":"..."}],"autodm":{"keyword":"...","mensagem":"..."},"hashtags":["#h1","#h2","#h3"]}
 Apenas JSON válido.`,
-
       "business": `Crie kit de lançamento COMPLETO em ${lang} para 7 dias.
 Produto: ${product}. Preço: ${price}. Público: ${audience}.
 Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
 Retorne JSON VÁLIDO:
-{
-  "label": "Kit Completo (7 dias)",
-  "cronograma": [
-    {"dia": 7, "tipo": "aquecimento", "conteudo": "..."},
-    {"dia": 5, "tipo": "prova_social", "conteudo": "..."},
-    {"dia": 3, "tipo": "teaser", "conteudo": "..."},
-    {"dia": 1, "tipo": "lancamento", "conteudo": "..."},
-    {"dia": 0, "tipo": "ultimo_dia", "conteudo": "..."}
-  ],
-  "posts": [
-    {"dia": 7, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 3, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 1, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 0, "hook": "...", "desenvolvimento": "...", "cta": "..."}
-  ],
-  "stories": [
-    {"dia": 7, "stories": ["...", "...", "..."]},
-    {"dia": 3, "stories": ["...", "...", "..."]},
-    {"dia": 1, "stories": ["...", "...", "..."]},
-    {"dia": 0, "stories": ["...", "..."]}
-  ],
-  "autodm": {"keyword": "...", "mensagens": ["msg1", "msg2", "msg3"]},
-  "email": {"assunto": "...", "corpo": "..."},
-  "hashtags": ["#h1", "#h2", "#h3", "#h4", "#h5"]
-}
+{"label":"Kit Completo (7 dias)","cronograma":[{"dia":7,"tipo":"aquecimento","conteudo":"..."},{"dia":5,"tipo":"prova_social","conteudo":"..."},{"dia":3,"tipo":"teaser","conteudo":"..."},{"dia":1,"tipo":"lancamento","conteudo":"..."},{"dia":0,"tipo":"ultimo_dia","conteudo":"..."}],"posts":[{"dia":7,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":3,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":1,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":0,"hook":"...","desenvolvimento":"...","cta":"..."}],"stories":[{"dia":7,"stories":["...","...","..."]},{"dia":3,"stories":["...","...","..."]},{"dia":1,"stories":["...","...","..."]},{"dia":0,"stories":["...","..."]}],"autodm":{"keyword":"...","mensagens":["msg1","msg2","msg3"]},"email":{"assunto":"...","corpo":"..."},"hashtags":["#h1","#h2","#h3","#h4","#h5"]}
 Apenas JSON válido.`,
-
       "agency": `Crie kit de lançamento PREMIUM em ${lang} para 14 dias.
 Produto: ${product}. Preço: ${price}. Público: ${audience}.
 Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
 Retorne JSON VÁLIDO:
-{
-  "label": "Kit Premium (14 dias)",
-  "cronograma": [
-    {"dia": 14, "tipo": "pre_aquecimento", "conteudo": "..."},
-    {"dia": 10, "tipo": "aquecimento", "conteudo": "..."},
-    {"dia": 7, "tipo": "prova_social", "conteudo": "..."},
-    {"dia": 5, "tipo": "teaser", "conteudo": "..."},
-    {"dia": 3, "tipo": "urgencia", "conteudo": "..."},
-    {"dia": 1, "tipo": "lancamento", "conteudo": "..."},
-    {"dia": 0, "tipo": "ultimo_dia", "conteudo": "..."}
-  ],
-  "posts": [
-    {"dia": 14, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 10, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 7, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 5, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 3, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 1, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 0, "hook": "...", "desenvolvimento": "...", "cta": "..."}
-  ],
-  "stories": [
-    {"dia": 14, "stories": ["...", "...", "..."]},
-    {"dia": 10, "stories": ["...", "...", "..."]},
-    {"dia": 7, "stories": ["...", "...", "..."]},
-    {"dia": 5, "stories": ["...", "...", "..."]},
-    {"dia": 3, "stories": ["...", "...", "..."]},
-    {"dia": 1, "stories": ["...", "...", "..."]},
-    {"dia": 0, "stories": ["...", "..."]}
-  ],
-  "autodm": {"keyword": "...", "mensagens": ["msg1", "msg2", "msg3", "msg4"]},
-  "email": {"assunto": "...", "corpo": "..."},
-  "script_youtube": "...",
-  "roteiro_live": "...",
-  "hashtags": ["#h1", "#h2", "#h3", "#h4", "#h5"]
-}
+{"label":"Kit Premium (14 dias)","cronograma":[{"dia":14,"tipo":"pre_aquecimento","conteudo":"..."},{"dia":10,"tipo":"aquecimento","conteudo":"..."},{"dia":7,"tipo":"prova_social","conteudo":"..."},{"dia":5,"tipo":"teaser","conteudo":"..."},{"dia":3,"tipo":"urgencia","conteudo":"..."},{"dia":1,"tipo":"lancamento","conteudo":"..."},{"dia":0,"tipo":"ultimo_dia","conteudo":"..."}],"posts":[{"dia":14,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":10,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":7,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":5,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":3,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":1,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":0,"hook":"...","desenvolvimento":"...","cta":"..."}],"stories":[{"dia":14,"stories":["...","...","..."]},{"dia":10,"stories":["...","...","..."]},{"dia":7,"stories":["...","...","..."]},{"dia":5,"stories":["...","...","..."]},{"dia":3,"stories":["...","...","..."]},{"dia":1,"stories":["...","...","..."]},{"dia":0,"stories":["...","..."]}],"autodm":{"keyword":"...","mensagens":["msg1","msg2","msg3","msg4"]},"email":{"assunto":"...","corpo":"..."},"script_youtube":"...","roteiro_live":"...","hashtags":["#h1","#h2","#h3","#h4","#h5"]}
 Apenas JSON válido.`
     };
 
@@ -662,7 +575,6 @@ Apenas JSON válido.`
     const result = JSON.parse(clean);
     return res.json({ success: true, plan: userPlan, kit: result });
   } catch (error) {
-    console.error("🚨 Erro launch kit:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -749,7 +661,6 @@ app.post("/tools/generate-collab", async (req, res) => {
 app.post("/tools/generate-carousel", async (req, res) => {
   try {
     const { tema, niche, slides_count, style, font, language, formato, finalidade } = req.body;
-
     const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
 
@@ -772,10 +683,10 @@ app.post("/tools/generate-carousel", async (req, res) => {
     const size = sizeMap[formato] || sizeMap["quadrado"];
 
     const finalidadePrompts = {
-      "carrossel": `Slide 1: capa com hook forte. Slides intermediários: conteúdo em tópicos. Último slide: CTA.`,
-      "post": `Apenas 1 slide impactante. Texto curto e direto.`,
-      "stories": `Cada story independente. Texto mínimo. CTA no último.`,
-      "produto": `Slide 1: headline. Slide 2: benefícios. Slide 3: prova social. Slide 4: preço + CTA.`
+      "carrossel": "Slide 1: capa com hook forte. Slides intermediários: conteúdo em tópicos. Último slide: CTA.",
+      "post": "Apenas 1 slide impactante. Texto curto e direto.",
+      "stories": "Cada story independente. Texto mínimo. CTA no último.",
+      "produto": "Slide 1: headline. Slide 2: benefícios. Slide 3: prova social. Slide 4: preço + CTA."
     };
 
     const estrutura = finalidadePrompts[finalidade] || finalidadePrompts["carrossel"];
@@ -793,10 +704,8 @@ app.post("/tools/generate-carousel", async (req, res) => {
     const data = await response.json();
     const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(clean);
-
     return res.json({ success: true, carousel: result, size });
   } catch (error) {
-    console.error("🚨 Erro generate-carousel:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -837,12 +746,7 @@ Tom: ${toneDesc}
 Número de slides: ${photos.length}
 Slide 1 = capa com hook forte. Último slide = CTA.
 Retorne JSON:
-{
-  "slides": [{"numero":1,"titulo":"max 5 palavras","texto":"max 2 frases","emoji":"🔥","cor_texto":"#FFFFFF","cor_fundo_overlay":"rgba(0,0,0,0.5)"}],
-  "legenda": "legenda completa com emojis",
-  "hashtags": ["#hash1","#hash2"],
-  "cta": "call to action"
-}
+{"slides":[{"numero":1,"titulo":"max 5 palavras","texto":"max 2 frases","emoji":"🔥","cor_texto":"#FFFFFF","cor_fundo_overlay":"rgba(0,0,0,0.5)"}],"legenda":"legenda completa com emojis","hashtags":["#hash1","#hash2"],"cta":"call to action"}
 Apenas JSON válido.`
         }]
       })
@@ -867,14 +771,123 @@ Apenas JSON válido.`
       cta: result.cta,
       total_photos: photos.length
     });
-
   } catch (error) {
-    console.error("🚨 Erro carousel-from-photos:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 🎨 GERAR IMAGEM COM DALL-E
+// 🎨 SMART IMAGE ROUTER
+app.post("/tools/smart-image", async (req, res) => {
+  try {
+    const { prompt, style } = req.body;
+    if (!prompt) return res.status(400).json({ error: "Prompt obrigatório" });
+
+    // STEP 1 — Claude decide qual modelo usar
+    const decisionResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 10,
+        messages: [{
+          role: "user",
+          content: `Analise esse prompt de imagem e responda APENAS com "nano" ou "dalle":
+
+Prompt: "${prompt}"
+Estilo: "${style || 'default'}"
+
+Use "nano" se: fotorrealista, pessoa real, produto real, thumbnail com texto, cena realista
+Use "dalle" se: artístico, ilustração, anime, cartoon, abstrato, criativo, 3D render
+
+Responda apenas: nano ou dalle`
+        }]
+      })
+    });
+
+    const decisionData = await decisionResponse.json();
+    const model = decisionData.content[0].text.trim().toLowerCase().includes("nano") ? "nano" : "dalle";
+    console.log(`🎨 Smart Router escolheu: ${model} para: "${prompt.substring(0, 50)}"`);
+
+    if (model === "nano") {
+      try {
+        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY);
+        const imageModel = genAI.getGenerativeModel({
+          model: "gemini-2.0-flash-preview-image-generation"
+        });
+
+        const fullPrompt = `${prompt}, high quality, professional, realistic, 1080x1080`;
+
+        const result = await imageModel.generateContent({
+          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+          generationConfig: { responseModalities: ["image", "text"] }
+        });
+
+        const imagePart = result.response.candidates[0].content.parts
+          .find(p => p.inlineData);
+
+        if (imagePart) {
+          console.log("✅ Nano Banana 2 gerou imagem");
+          return res.json({
+            success: true,
+            model_used: "nano_banana_2",
+            image_base64: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`
+          });
+        }
+        throw new Error("Nano Banana não retornou imagem");
+      } catch (nanoError) {
+        console.log("⚠️ Nano Banana falhou, usando DALL-E:", nanoError.message);
+      }
+    }
+
+    // DALL-E 3
+    const stylePrompts = {
+      "realista": "photorealistic, high quality, professional photography",
+      "ilustracao": "digital illustration, flat design, colorful",
+      "digital": "3D render, cinema 4D, professional digital art",
+      "minimalista": "minimalist, clean, simple, modern design",
+      "cartoon": "cartoon style, fun, colorful, animated illustration"
+    };
+
+    const styleAdd = stylePrompts[style] || stylePrompts["digital"];
+    const fullPrompt = `${prompt}, ${styleAdd}, purple and cyan color palette, dark background, modern, high quality, 1080x1080`;
+
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: fullPrompt,
+        n: 1,
+        size: "1024x1024",
+        quality: "standard",
+        response_format: "url"
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.data?.[0]?.url) {
+      return res.status(500).json({ error: "Erro ao gerar imagem" });
+    }
+
+    console.log("✅ DALL-E 3 gerou imagem");
+    return res.json({
+      success: true,
+      model_used: "dalle_3",
+      image_url: data.data[0].url
+    });
+
+  } catch (error) {
+    console.error("🚨 Erro smart-image:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🎨 GERAR IMAGEM DALL-E (endpoint original mantido)
 app.post("/tools/generate-image", async (req, res) => {
   try {
     const { prompt, style } = req.body;
@@ -905,7 +918,6 @@ app.post("/tools/generate-image", async (req, res) => {
     });
 
     const data = await response.json();
-
     if (!data.data?.[0]?.url) {
       return res.status(500).json({ error: "Erro ao gerar imagem", raw: data });
     }
@@ -915,9 +927,7 @@ app.post("/tools/generate-image", async (req, res) => {
       image_url: data.data[0].url,
       revised_prompt: data.data[0].revised_prompt
     });
-
   } catch (error) {
-    console.error("🚨 Erro generate-image:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -951,7 +961,6 @@ app.post("/analytics/analyze-profile", async (req, res) => {
 
     return res.json({ success: true, username, analysis });
   } catch (error) {
-    console.error("🚨 Erro analyze-profile:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -976,10 +985,8 @@ app.post("/analytics/analyze-competitor", async (req, res) => {
     const data = await response.json();
     const clean = data.content[0].text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(clean);
-
     return res.json({ success: true, competitor_analysis: result });
   } catch (error) {
-    console.error("🚨 Erro analyze-competitor:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -989,7 +996,6 @@ app.get("/analytics/usage/:user_id", async (req, res) => {
   try {
     const { user_id } = req.params;
     const mesAno = new Date().toISOString().slice(0, 7);
-
     const response = await fetch(
       `${process.env.SUPABASE_URL}/rest/v1/analytics_usage?user_id=eq.${user_id}&mes_ano=eq.${mesAno}`,
       { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
@@ -1010,8 +1016,7 @@ app.get("/admin/metrics", async (req, res) => {
     );
 
     const subs = await subsResponse.json();
-
-    const planPrices = { "creator": 39.90, "business": 79.90, "agency": 167.90, "free": 0 };
+    const planPrices = { "creator": 44.90, "business": 89.90, "agency": 179.90, "free": 0 };
 
     let mrr = 0;
     let paidUsers = 0;
@@ -1035,7 +1040,7 @@ app.get("/admin/metrics", async (req, res) => {
     const arrAtual = mrr * 12;
     const progressoPercent = (arrAtual / metaAnual * 100).toFixed(2);
     const faltaParaMeta = metaAnual - arrAtual;
-    const usuariosPagosNecessarios = Math.ceil(faltaParaMeta / (39.90 * 12));
+    const usuariosPagosNecessarios = Math.ceil(faltaParaMeta / (44.90 * 12));
 
     return res.json({
       success: true,
@@ -1053,7 +1058,6 @@ app.get("/admin/metrics", async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("🚨 Erro admin metrics:", ERROR);
     res.status(500).json({ error: error.message });
   }
 });
