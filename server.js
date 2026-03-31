@@ -177,7 +177,7 @@ async function processIGEvent(event) {
 
     const flows = await getActiveFlows("dm_keyword");
     for (const flow of flows) {
-      if (message.includes(flow.keyword.toLowerCase())) {
+      if (flow.trigger_type === "any" || message.includes(flow.keyword?.toLowerCase())) {
         const isOptedOut = await checkOptOut(senderId);
         if (isOptedOut) return;
         await sendIGDM(senderId, flow.response_message);
@@ -199,10 +199,16 @@ async function processComment(comment) {
 
     const flows = await getActiveFlows("comment_keyword");
     for (const flow of flows) {
-      if (text.includes(flow.keyword.toLowerCase())) {
+      const matches = flow.trigger_type === "any_comment" || 
+                      text.includes(flow.keyword?.toLowerCase());
+      if (matches) {
         const isOptedOut = await checkOptOut(userId);
         if (isOptedOut) return;
-        if (flow.reply_comment) await replyComment(mediaId, comment.id, flow.comment_reply);
+        if (flow.reply_comment && flow.comment_replies) {
+          const replies = JSON.parse(flow.comment_replies);
+          const randomReply = replies[Math.floor(Math.random() * replies.length)];
+          await replyComment(mediaId, comment.id, randomReply);
+        }
         if (flow.send_dm) await sendIGDM(userId, flow.response_message);
         await logDM(userId, flow.id, text);
         break;
@@ -241,11 +247,17 @@ async function replyComment(mediaId, commentId, message) {
 async function getActiveFlows(trigger_type) {
   try {
     const response = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/autodm_flows?status=eq.active&trigger_type=eq.${trigger_type}`,
+      `${process.env.SUPABASE_URL}/rest/v1/autodm_flows?status=eq.active`,
       { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
     );
-    return await response.json();
+    const flows = await response.json();
+    return Array.isArray(flows) ? flows.filter(f => 
+      f.trigger_type === trigger_type || 
+      f.trigger_type === "any" || 
+      f.trigger_type === "any_comment"
+    ) : [];
   } catch (error) {
+    console.error("🚨 Erro getActiveFlows:", error);
     return [];
   }
 }
@@ -290,11 +302,21 @@ async function addOptOut(igUserId) {
 // 📊 AUTODM — CRIAR FLUXO
 app.post("/autodm/flows", async (req, res) => {
   try {
-    const { user_id, name, trigger_type, keyword, response_message, reply_comment, comment_reply, send_dm } = req.body;
+    const { user_id, name, trigger_type, keyword, response_message, reply_comment, comment_replies, send_dm, target_post, delay_seconds, multilingual } = req.body;
     const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/autodm_flows`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ user_id, name, trigger_type, keyword, response_message, reply_comment: reply_comment || false, comment_reply: comment_reply || "", send_dm: send_dm || true, status: "active", created_at: new Date().toISOString() })
+      body: JSON.stringify({ 
+        user_id, name, trigger_type, keyword, response_message, 
+        reply_comment: reply_comment || false, 
+        comment_replies: comment_replies ? JSON.stringify(comment_replies) : null,
+        send_dm: send_dm || true, 
+        target_post: target_post || "any",
+        delay_seconds: delay_seconds || 0,
+        multilingual: multilingual || false,
+        status: "active", 
+        created_at: new Date().toISOString() 
+      })
     });
     const data = await response.json();
     return res.json({ success: true, flow: data });
@@ -318,12 +340,31 @@ app.get("/autodm/flows/:user_id", async (req, res) => {
   }
 });
 
+// 📊 AUTODM — ATUALIZAR STATUS DO FLUXO
+app.patch("/autodm/flows/:flow_id", async (req, res) => {
+  try {
+    const { flow_id } = req.params;
+    const { status } = req.body;
+    const response = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/autodm_flows?id=eq.${flow_id}`,
+      { 
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ status, updated_at: new Date().toISOString() })
+      }
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 📊 AUTODM — MÉTRICAS
 app.get("/autodm/stats/:user_id", async (req, res) => {
   try {
     const { user_id } = req.params;
     const response = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/autodm_logs?flow_id=in.(select id from autodm_flows where user_id='${user_id}')`,
+      `${process.env.SUPABASE_URL}/rest/v1/autodm_logs?select=*,autodm_flows!inner(user_id)&autodm_flows.user_id=eq.${user_id}`,
       { headers: { "apikey": process.env.SUPABASE_ANON_KEY, "Authorization": `Bearer ${process.env.SUPABASE_ANON_KEY}` } }
     );
     const logs = await response.json();
@@ -333,10 +374,10 @@ app.get("/autodm/stats/:user_id", async (req, res) => {
   }
 });
 
-// 🤖 AUTODM — GERAR MENSAGEM
+// 🤖 AUTODM — GERAR MENSAGEM COM IA
 app.post("/autodm/generate-message", async (req, res) => {
   try {
-    const { keyword, niche, objective, language } = req.body;
+    const { keyword, niche, objective, language, style } = req.body;
     const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
 
@@ -346,12 +387,76 @@ app.post("/autodm/generate-message", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 300,
-        messages: [{ role: "user", content: `Crie uma mensagem direta para Instagram em ${lang}. Palavra-chave: ${keyword}. Nicho: ${niche}. Objetivo: ${objective}. Máximo 3 frases, natural, com CTA. Retorne apenas a mensagem.` }]
+        messages: [{ role: "user", content: `Crie uma mensagem direta para Instagram em ${lang}. Palavra-chave: ${keyword}. Nicho: ${niche}. Objetivo: ${objective}. ${style ? `Estilo: ${style}` : ""}. Máximo 3 frases, natural, com CTA. Use {nome} para personalizar. Retorne apenas a mensagem.` }]
       })
     });
     const data = await response.json();
     return res.json({ success: true, message: data.content[0].text });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🤖 AUTODM — GERAR FLUXO COMPLETO COM IA
+app.post("/autodm/generate-flow", async (req, res) => {
+  try {
+    const { product, objective, tone, language } = req.body;
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const toneMap = {
+      "amigavel": "amigável, caloroso e próximo",
+      "profissional": "profissional e confiante",
+      "urgente": "urgente, com escassez e gatilhos",
+      "casual": "casual, descontraído e natural"
+    };
+
+    const toneDesc = toneMap[tone] || toneMap["amigavel"];
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1500,
+        messages: [{
+          role: "user",
+          content: `Crie um fluxo completo de AutoDM para Instagram em ${lang}.
+
+Produto/Serviço: ${product}
+Objetivo: ${objective}
+Tom: ${toneDesc}
+
+Retorne JSON:
+{
+  "mensagem_1": "mensagem inicial max 3 frases com {nome}",
+  "botoes": [
+    {"texto": "botão positivo max 20 chars", "acao": "next"},
+    {"texto": "botão negativo max 20 chars", "acao": "end"}
+  ],
+  "mensagem_2": "mensagem após clique positivo com [LINK] onde link deve ir",
+  "mensagem_encerramento": "mensagem se clicar negativo curta e gentil",
+  "keyword_sugerida": "palavra-chave para o gatilho",
+  "delay_sugerido": "5 segundos",
+  "resposta_comentario_opcoes": [
+    "resposta pública 1 max 10 palavras",
+    "resposta pública 2 max 10 palavras",
+    "resposta pública 3 max 10 palavras"
+  ]
+}
+Apenas JSON.`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+
+    console.log("✅ Fluxo AutoDM gerado com IA");
+    return res.json({ success: true, flow: result });
+  } catch (error) {
+    console.error("🚨 Erro generate-flow:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -424,30 +529,11 @@ app.post("/tools/generate-launch-kit", async (req, res) => {
     const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
 
-    // Configurar por plano
     const planConfig = {
-      "free": null, // Sem acesso
-      "creator": {
-        max_tokens: 1500,
-        dias: 3,
-        posts: 3,
-        stories: 3,
-        label: "Kit Básico (3 dias)"
-      },
-      "business": {
-        max_tokens: 2500,
-        dias: 7,
-        posts: 7,
-        stories: 10,
-        label: "Kit Completo (7 dias)"
-      },
-      "agency": {
-        max_tokens: 4000,
-        dias: 14,
-        posts: 14,
-        stories: 21,
-        label: "Kit Premium (14 dias)"
-      }
+      "free": null,
+      "creator": { max_tokens: 1500, label: "Kit Básico (3 dias)" },
+      "business": { max_tokens: 2500, label: "Kit Completo (7 dias)" },
+      "agency": { max_tokens: 4000, label: "Kit Premium (14 dias)" }
     };
 
     const userPlan = plan || "creator";
@@ -462,16 +548,15 @@ app.post("/tools/generate-launch-kit", async (req, res) => {
     const config = planConfig[userPlan] || planConfig["creator"];
 
     const promptByPlan = {
-      "creator": `Crie kit de lançamento BÁSICO em ${lang} para ${config.dias} dias.
-Produto: ${product}. Preço: ${price}. Público: ${audience}. 
+      "creator": `Crie kit de lançamento BÁSICO em ${lang} para 3 dias.
+Produto: ${product}. Preço: ${price}. Público: ${audience}.
 Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
-
-Retorne JSON COMPACTO e VÁLIDO:
+Retorne JSON VÁLIDO:
 {
-  "label": "${config.label}",
+  "label": "Kit Básico (3 dias)",
   "cronograma": [
     {"dia": 3, "tipo": "teaser", "conteudo": "..."},
-    {"dia": 1, "tipo": "lançamento", "conteudo": "..."},
+    {"dia": 1, "tipo": "lancamento", "conteudo": "..."},
     {"dia": 0, "tipo": "ultimo_dia", "conteudo": "..."}
   ],
   "posts": [
@@ -487,15 +572,14 @@ Retorne JSON COMPACTO e VÁLIDO:
   "autodm": {"keyword": "...", "mensagem": "..."},
   "hashtags": ["#h1", "#h2", "#h3"]
 }
-Apenas JSON válido e completo.`,
+Apenas JSON válido.`,
 
-      "business": `Crie kit de lançamento COMPLETO em ${lang} para ${config.dias} dias.
+      "business": `Crie kit de lançamento COMPLETO em ${lang} para 7 dias.
 Produto: ${product}. Preço: ${price}. Público: ${audience}.
 Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
-
 Retorne JSON VÁLIDO:
 {
-  "label": "${config.label}",
+  "label": "Kit Completo (7 dias)",
   "cronograma": [
     {"dia": 7, "tipo": "aquecimento", "conteudo": "..."},
     {"dia": 5, "tipo": "prova_social", "conteudo": "..."},
@@ -505,7 +589,6 @@ Retorne JSON VÁLIDO:
   ],
   "posts": [
     {"dia": 7, "hook": "...", "desenvolvimento": "...", "cta": "..."},
-    {"dia": 5, "hook": "...", "desenvolvimento": "...", "cta": "..."},
     {"dia": 3, "hook": "...", "desenvolvimento": "...", "cta": "..."},
     {"dia": 1, "hook": "...", "desenvolvimento": "...", "cta": "..."},
     {"dia": 0, "hook": "...", "desenvolvimento": "...", "cta": "..."}
@@ -516,22 +599,18 @@ Retorne JSON VÁLIDO:
     {"dia": 1, "stories": ["...", "...", "..."]},
     {"dia": 0, "stories": ["...", "..."]}
   ],
-  "autodm": {
-    "keyword": "...",
-    "mensagens": ["msg1", "msg2", "msg3"]
-  },
+  "autodm": {"keyword": "...", "mensagens": ["msg1", "msg2", "msg3"]},
   "email": {"assunto": "...", "corpo": "..."},
   "hashtags": ["#h1", "#h2", "#h3", "#h4", "#h5"]
 }
-Apenas JSON válido e completo.`,
+Apenas JSON válido.`,
 
-      "agency": `Crie kit de lançamento PREMIUM em ${lang} para ${config.dias} dias.
+      "agency": `Crie kit de lançamento PREMIUM em ${lang} para 14 dias.
 Produto: ${product}. Preço: ${price}. Público: ${audience}.
 Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
-
 Retorne JSON VÁLIDO:
 {
-  "label": "${config.label}",
+  "label": "Kit Premium (14 dias)",
   "cronograma": [
     {"dia": 14, "tipo": "pre_aquecimento", "conteudo": "..."},
     {"dia": 10, "tipo": "aquecimento", "conteudo": "..."},
@@ -559,16 +638,13 @@ Retorne JSON VÁLIDO:
     {"dia": 1, "stories": ["...", "...", "..."]},
     {"dia": 0, "stories": ["...", "..."]}
   ],
-  "autodm": {
-    "keyword": "...",
-    "mensagens": ["msg1", "msg2", "msg3", "msg4"]
-  },
+  "autodm": {"keyword": "...", "mensagens": ["msg1", "msg2", "msg3", "msg4"]},
   "email": {"assunto": "...", "corpo": "..."},
   "script_youtube": "...",
   "roteiro_live": "...",
   "hashtags": ["#h1", "#h2", "#h3", "#h4", "#h5"]
 }
-Apenas JSON válido e completo.`
+Apenas JSON válido.`
     };
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -603,8 +679,8 @@ app.post("/tools/generate-youtube", async (req, res) => {
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: `Crie pacote YouTube em ${lang}. Tema: ${topic}. Nicho: ${niche}. Keyword: ${keyword}. Duração: ${duration}min. Retorne JSON: {"titulos":["t1","t2","t3","t4","t5"],"descricao":"...","tags":["tag1"],"hashtags":["#h1"],"thumbnail":{"texto_principal":"...","subtexto":"...","cor_sugerida":"..."},"tela_final":"..."}. Apenas JSON.` }]
+        max_tokens: 1500,
+        messages: [{ role: "user", content: `Crie pacote YouTube completo em ${lang}. Tema: ${topic}. Nicho: ${niche}. Keyword: ${keyword}. Duração: ${duration}min. Retorne JSON: {"titulos":["t1","t2","t3","t4","t5"],"descricao":"...","tags":["tag1","tag2"],"hashtags":["#h1","#h2"],"thumbnail":{"texto_principal":"...","subtexto":"...","cor_sugerida":"...","prompt_imagem":"..."},"tela_final":"...","capitulos":[{"tempo":"0:00","titulo":"..."}]}. Apenas JSON.` }]
       })
     });
 
@@ -686,20 +762,20 @@ app.post("/tools/generate-carousel", async (req, res) => {
     };
 
     const sizeMap = {
-      "quadrado": { width: 1080, height: 1080, ratio: "1:1" },
-      "retrato": { width: 1080, height: 1350, ratio: "4:5" },
-      "stories": { width: 1080, height: 1920, ratio: "9:16" },
-      "paisagem": { width: 1080, height: 566, ratio: "1.91:1" }
+      "quadrado": { width: 1080, height: 1080 },
+      "retrato": { width: 1080, height: 1350 },
+      "stories": { width: 1080, height: 1920 },
+      "paisagem": { width: 1080, height: 566 }
     };
 
     const cores = styleMap[style] || styleMap["dark"];
     const size = sizeMap[formato] || sizeMap["quadrado"];
 
     const finalidadePrompts = {
-      "carrossel": `- Slide 1: capa com hook forte\n- Slides intermediários: conteúdo em tópicos\n- Último slide: CTA`,
-      "post": `- Apenas 1 slide impactante\n- Texto curto e direto`,
-      "stories": `- Cada story independente\n- Texto mínimo\n- CTA no último`,
-      "produto": `- Slide 1: headline\n- Slide 2: benefícios\n- Slide 3: prova social\n- Slide 4: preço + CTA`
+      "carrossel": `Slide 1: capa com hook forte. Slides intermediários: conteúdo em tópicos. Último slide: CTA.`,
+      "post": `Apenas 1 slide impactante. Texto curto e direto.`,
+      "stories": `Cada story independente. Texto mínimo. CTA no último.`,
+      "produto": `Slide 1: headline. Slide 2: benefícios. Slide 3: prova social. Slide 4: preço + CTA.`
     };
 
     const estrutura = finalidadePrompts[finalidade] || finalidadePrompts["carrossel"];
@@ -710,7 +786,7 @@ app.post("/tools/generate-carousel", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\n\nEstrutura:\n${estrutura}\n\nRegras:\n- Títulos max 5 palavras\n- Max 3 bullet points por slide\n- Um emoji por slide\n- Sugestão de imagem em inglês por slide\n\nRetorne JSON:\n{\n"slides":[{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}","image_suggestion":"..."}],\n"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"\n}\nApenas JSON válido.` }]
+        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\nEstrutura: ${estrutura}\nRegras: Títulos max 5 palavras. Max 3 bullet points por slide. Um emoji por slide. Sugestão de imagem em inglês por slide.\nRetorne JSON:\n{"slides":[{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}","image_suggestion":"..."}],"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"}\nApenas JSON válido.` }]
       })
     });
 
@@ -759,24 +835,12 @@ app.post("/tools/generate-carousel-from-photos", upload.array("photos", 10), asy
 Contexto: ${context}
 Tom: ${toneDesc}
 Número de slides: ${photos.length}
-
-Slide 1 = capa com hook forte.
-Último slide = CTA.
-
+Slide 1 = capa com hook forte. Último slide = CTA.
 Retorne JSON:
 {
-  "slides": [
-    {
-      "numero": 1,
-      "titulo": "título max 5 palavras",
-      "texto": "max 2 frases",
-      "emoji": "🔥",
-      "cor_texto": "#FFFFFF",
-      "cor_fundo_overlay": "rgba(0,0,0,0.5)"
-    }
-  ],
+  "slides": [{"numero":1,"titulo":"max 5 palavras","texto":"max 2 frases","emoji":"🔥","cor_texto":"#FFFFFF","cor_fundo_overlay":"rgba(0,0,0,0.5)"}],
   "legenda": "legenda completa com emojis",
-  "hashtags": ["#hash1", "#hash2"],
+  "hashtags": ["#hash1","#hash2"],
   "cta": "call to action"
 }
 Apenas JSON válido.`
@@ -905,7 +969,7 @@ app.post("/analytics/analyze-competitor", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1500,
-        messages: [{ role: "user", content: `Analise concorrente do Instagram em ${lang}.\nMeu perfil: @${my_username} (${my_followers} seguidores)\nConcorrente: @${username}\n\nRetorne JSON:\n{"competitor":{"username":"${username}","score":71,"followers_estimate":"50k-100k","engagement_rate":2.8,"posts_per_week":4,"melhor_horario":"20h","niche":"Fitness","top_hashtags":["#fitness","#saude"],"sponsored_posts_estimate":3,"valor_publi_estimado":"R$500-2000"},"benchmarking":{"engajamento":{"eu":4.2,"concorrente":2.8,"vencedor":"eu"},"crescimento":{"eu":"+2.3k/mês","concorrente":"+1.1k/mês","vencedor":"eu"},"consistencia":{"eu":"3x/semana","concorrente":"4x/semana","vencedor":"concorrente"}},"analise_geral":"...","sugestoes_para_superar":["s1","s2","s3"],"pontos_fortes_concorrente":["p1","p2"],"oportunidades":["o1","o2"]}\nApenas JSON.` }]
+        messages: [{ role: "user", content: `Analise concorrente do Instagram em ${lang}.\nMeu perfil: @${my_username} (${my_followers} seguidores)\nConcorrente: @${username}\n\nRetorne JSON:\n{"competitor":{"username":"${username}","score":71,"followers_estimate":"50k-100k","engagement_rate":2.8,"posts_per_week":4,"melhor_horario":"20h","niche":"Fitness","top_hashtags":["#fitness"],"sponsored_posts_estimate":3,"valor_publi_estimado":"R$500-2000"},"benchmarking":{"engajamento":{"eu":4.2,"concorrente":2.8,"vencedor":"eu"},"crescimento":{"eu":"+2.3k/mês","concorrente":"+1.1k/mês","vencedor":"eu"},"consistencia":{"eu":"3x/semana","concorrente":"4x/semana","vencedor":"concorrente"}},"analise_geral":"...","sugestoes_para_superar":["s1","s2","s3"],"pontos_fortes_concorrente":["p1","p2"],"oportunidades":["o1","o2"]}\nApenas JSON.` }]
       })
     });
 
@@ -947,12 +1011,7 @@ app.get("/admin/metrics", async (req, res) => {
 
     const subs = await subsResponse.json();
 
-    const planPrices = {
-      "creator": 39.90,
-      "business": 79.90,
-      "agency": 167.90,
-      "free": 0
-    };
+    const planPrices = { "creator": 39.90, "business": 79.90, "agency": 167.90, "free": 0 };
 
     let mrr = 0;
     let paidUsers = 0;
@@ -994,7 +1053,7 @@ app.get("/admin/metrics", async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("🚨 Erro admin metrics:", error);
+    console.error("🚨 Erro admin metrics:", ERROR);
     res.status(500).json({ error: error.message });
   }
 });
