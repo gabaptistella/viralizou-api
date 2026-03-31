@@ -20,6 +20,7 @@ console.log("🔑 Claude key:", process.env.ANTHROPIC_API_KEY ? "OK ✅" : "UNDE
 console.log("🔑 OpenAI key:", process.env.OPENAI_API_KEY ? "OK ✅" : "UNDEFINED ❌");
 console.log("🔑 ElevenLabs key:", process.env.ELEVENLABS_API_KEY ? "OK ✅" : "UNDEFINED ❌");
 console.log("🔑 Google AI key:", process.env.GOOGLE_AI_KEY ? "OK ✅" : "UNDEFINED ❌");
+console.log("🔑 Leonardo key:", process.env.LEONARDO_API_KEY ? "OK ✅" : "UNDEFINED ❌");
 console.log("🔑 IG Token:", process.env.IG_ACCESS_TOKEN ? "OK ✅" : "UNDEFINED ❌");
 
 app.get("/", (req, res) => {
@@ -776,7 +777,7 @@ Apenas JSON válido.`
   }
 });
 
-// 🎨 SMART IMAGE ROUTER
+// 🎨 SMART IMAGE ROUTER — Nano Banana 2 + Leonardo AI + DALL-E 3
 app.post("/tools/smart-image", async (req, res) => {
   try {
     const { prompt, style } = req.body;
@@ -795,23 +796,29 @@ app.post("/tools/smart-image", async (req, res) => {
         max_tokens: 10,
         messages: [{
           role: "user",
-          content: `Analise esse prompt de imagem e responda APENAS com "nano" ou "dalle":
+          content: `Analise esse prompt e responda APENAS com "nano", "leonardo" ou "dalle":
 
 Prompt: "${prompt}"
 Estilo: "${style || 'default'}"
 
-Use "nano" se: fotorrealista, pessoa real, produto real, thumbnail com texto, cena realista
-Use "dalle" se: artístico, ilustração, anime, cartoon, abstrato, criativo, 3D render
+nano → fotorrealista, pessoa real, produto real, thumbnail com texto, cena realista
+leonardo → artístico, ilustração, anime, cartoon, fantasia, criativo, estilizado
+dalle → abstrato, 3D render, design minimalista, fallback geral
 
-Responda apenas: nano ou dalle`
+Responda apenas uma palavra: nano, leonardo ou dalle`
         }]
       })
     });
 
     const decisionData = await decisionResponse.json();
-    const model = decisionData.content[0].text.trim().toLowerCase().includes("nano") ? "nano" : "dalle";
+    const rawDecision = decisionData.content[0].text.trim().toLowerCase();
+    let model = "dalle";
+    if (rawDecision.includes("nano")) model = "nano";
+    else if (rawDecision.includes("leonardo")) model = "leonardo";
+
     console.log(`🎨 Smart Router escolheu: ${model} para: "${prompt.substring(0, 50)}"`);
 
+    // STEP 2 — Nano Banana 2
     if (model === "nano") {
       try {
         const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY);
@@ -819,10 +826,8 @@ Responda apenas: nano ou dalle`
           model: "gemini-2.0-flash-preview-image-generation"
         });
 
-        const fullPrompt = `${prompt}, high quality, professional, realistic, 1080x1080`;
-
         const result = await imageModel.generateContent({
-          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+          contents: [{ role: "user", parts: [{ text: `${prompt}, high quality, professional, realistic, 1080x1080` }] }],
           generationConfig: { responseModalities: ["image", "text"] }
         });
 
@@ -839,11 +844,83 @@ Responda apenas: nano ou dalle`
         }
         throw new Error("Nano Banana não retornou imagem");
       } catch (nanoError) {
-        console.log("⚠️ Nano Banana falhou, usando DALL-E:", nanoError.message);
+        console.log("⚠️ Nano Banana falhou, tentando Leonardo:", nanoError.message);
+        model = "leonardo";
       }
     }
 
-    // DALL-E 3
+    // STEP 3 — Leonardo AI
+    if (model === "leonardo") {
+      try {
+        const styleMap = {
+          "realista": "PHOTO",
+          "ilustracao": "ILLUSTRATION",
+          "digital": "GRAPHIC_DESIGN",
+          "minimalista": "MINIMALIST",
+          "cartoon": "COMIC",
+          "anime": "ANIME"
+        };
+
+        const leonardoStyle = styleMap[style] || "DYNAMIC";
+
+        // Criar geração
+        const genResponse = await fetch("https://cloud.leonardo.ai/api/rest/v1/generations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.LEONARDO_API_KEY}`
+          },
+          body: JSON.stringify({
+            prompt: `${prompt}, high quality, professional, vibrant colors`,
+            modelId: "b24e16ff-06e3-43eb-8d33-4416c2d75876",
+            width: 1024,
+            height: 1024,
+            num_images: 1,
+            presetStyle: leonardoStyle,
+            guidance_scale: 7,
+            public: false
+          })
+        });
+
+        const genData = await genResponse.json();
+        const generationId = genData.sdGenerationJob?.generationId;
+
+        if (!generationId) throw new Error("Leonardo não retornou generation ID");
+
+        // Polling para aguardar resultado
+        let imageUrl = null;
+        for (let i = 0; i < 10; i++) {
+          await new Promise(r => setTimeout(r, 3000));
+
+          const resultResponse = await fetch(
+            `https://cloud.leonardo.ai/api/rest/v1/generations/${generationId}`,
+            { headers: { "Authorization": `Bearer ${process.env.LEONARDO_API_KEY}` } }
+          );
+
+          const resultData = await resultResponse.json();
+          const images = resultData.generations_by_pk?.generated_images;
+
+          if (images && images.length > 0) {
+            imageUrl = images[0].url;
+            break;
+          }
+        }
+
+        if (!imageUrl) throw new Error("Leonardo timeout");
+
+        console.log("✅ Leonardo AI gerou imagem");
+        return res.json({
+          success: true,
+          model_used: "leonardo_ai",
+          image_url: imageUrl
+        });
+
+      } catch (leonardoError) {
+        console.log("⚠️ Leonardo falhou, usando DALL-E:", leonardoError.message);
+      }
+    }
+
+    // STEP 4 — DALL-E 3 (fallback final)
     const stylePrompts = {
       "realista": "photorealistic, high quality, professional photography",
       "ilustracao": "digital illustration, flat design, colorful",
@@ -874,7 +951,7 @@ Responda apenas: nano ou dalle`
       return res.status(500).json({ error: "Erro ao gerar imagem" });
     }
 
-    console.log("✅ DALL-E 3 gerou imagem");
+    console.log("✅ DALL-E 3 gerou imagem (fallback)");
     return res.json({
       success: true,
       model_used: "dalle_3",
