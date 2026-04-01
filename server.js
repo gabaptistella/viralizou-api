@@ -519,7 +519,7 @@ app.post("/tools/generate-bio", async (req, res) => {
   }
 });
 
-// 🛠️ FERRAMENTAS — KIT LANÇAMENTO POR PLANO
+// 🛠️ FERRAMENTAS — KIT LANÇAMENTO
 app.post("/tools/generate-launch-kit", async (req, res) => {
   try {
     const { product, price, audience, benefit, date, platform, language, plan } = req.body;
@@ -726,9 +726,9 @@ Retorne JSON:
     "emoji": "🔥",
     "cor_fundo": "${cores.cor_fundo}",
     "cor_texto": "${cores.cor_texto}",
-    "image_suggestion": "detailed image prompt in english matching the tone"
+    "image_suggestion": "detailed image prompt in english matching the tone and theme"
   }],
-  "roteiro": "roteiro narrativo completo e criativo conforme o tom ${toneDesc} — como se fosse um script para gravar ou narrar",
+  "roteiro": "roteiro narrativo completo e criativo conforme o tom ${toneDesc}",
   "legenda": "legenda completa para Instagram com emojis",
   "hashtags": ["#hashtag1", "#hashtag2"],
   "cta": "call to action final"
@@ -814,13 +814,13 @@ Apenas JSON válido.`
   }
 });
 
-// 🎨 SMART IMAGE ROUTER — Nano Banana 2 + Leonardo AI + DALL-E 3
+// 🎨 SMART IMAGE ROUTER — Nano Banana 2 + Leonardo AI (sem DALL-E)
 app.post("/tools/smart-image", async (req, res) => {
   try {
     const { prompt, style } = req.body;
     if (!prompt) return res.status(400).json({ error: "Prompt obrigatório" });
 
-    // STEP 1 — Claude decide qual modelo usar
+    // STEP 1 — Claude decide: nano ou leonardo
     const decisionResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -833,27 +833,23 @@ app.post("/tools/smart-image", async (req, res) => {
         max_tokens: 10,
         messages: [{
           role: "user",
-          content: `Analise esse prompt e responda APENAS com "nano", "leonardo" ou "dalle":
+          content: `Analise esse prompt e responda APENAS "nano" ou "leonardo":
 
 Prompt: "${prompt}"
-Estilo: "${style || 'default'}"
 
-nano → fotorrealista, pessoa real, produto real, thumbnail com texto, cena realista
-leonardo → artístico, ilustração, anime, cartoon, fantasia, criativo, estilizado
-dalle → abstrato, 3D render, design minimalista, fallback geral
+nano → fotorrealista, pessoa, produto, cena real, natureza, comida, esporte, paisagem
+leonardo → cartoon, anime, arte, ilustração, fantasia, criativo, estilizado, divertido, abstrato, mascote
 
-Responda apenas uma palavra: nano, leonardo ou dalle`
+Responda apenas: nano ou leonardo`
         }]
       })
     });
 
     const decisionData = await decisionResponse.json();
     const rawDecision = decisionData.content[0].text.trim().toLowerCase();
-    let model = "dalle";
-    if (rawDecision.includes("nano")) model = "nano";
-    else if (rawDecision.includes("leonardo")) model = "leonardo";
+    const model = rawDecision.includes("leonardo") ? "leonardo" : "nano";
 
-    console.log(`🎨 Smart Router escolheu: ${model} para: "${prompt.substring(0, 50)}"`);
+    console.log(`🎨 Smart Router: "${prompt.substring(0, 50)}" → ${model}`);
 
     // STEP 2 — Nano Banana 2
     if (model === "nano") {
@@ -864,7 +860,7 @@ Responda apenas uma palavra: nano, leonardo ou dalle`
         });
 
         const result = await imageModel.generateContent({
-          contents: [{ role: "user", parts: [{ text: `${prompt}, high quality, professional, realistic, 1080x1080` }] }],
+          contents: [{ role: "user", parts: [{ text: `${prompt}, high quality, professional, realistic, vibrant colors` }] }],
           generationConfig: { responseModalities: ["image", "text"] }
         });
 
@@ -882,116 +878,79 @@ Responda apenas uma palavra: nano, leonardo ou dalle`
         throw new Error("Nano Banana não retornou imagem");
       } catch (nanoError) {
         console.log("⚠️ Nano Banana falhou, tentando Leonardo:", nanoError.message);
-        model = "leonardo";
       }
     }
 
     // STEP 3 — Leonardo AI
-    if (model === "leonardo") {
-      try {
-        const styleMap = {
-          "realista": "PHOTO",
-          "ilustracao": "ILLUSTRATION",
-          "digital": "GRAPHIC_DESIGN",
-          "minimalista": "MINIMALIST",
-          "cartoon": "COMIC",
-          "anime": "ANIME"
-        };
+    try {
+      const styleMap = {
+        "realista": "PHOTO",
+        "ilustracao": "ILLUSTRATION",
+        "digital": "GRAPHIC_DESIGN",
+        "minimalista": "MINIMALIST",
+        "cartoon": "COMIC",
+        "anime": "ANIME"
+      };
 
-        const leonardoStyle = styleMap[style] || "DYNAMIC";
+      const leonardoStyle = styleMap[style] || "DYNAMIC";
 
-        const genResponse = await fetch("https://cloud.leonardo.ai/api/rest/v1/generations", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${process.env.LEONARDO_API_KEY}`
-          },
-          body: JSON.stringify({
-            prompt: `${prompt}, high quality, professional, vibrant colors`,
-            modelId: "b24e16ff-06e3-43eb-8d33-4416c2d75876",
-            width: 1024,
-            height: 1024,
-            num_images: 1,
-            presetStyle: leonardoStyle,
-            guidance_scale: 7,
-            public: false
-          })
-        });
+      const genResponse = await fetch("https://cloud.leonardo.ai/api/rest/v1/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.LEONARDO_API_KEY}`
+        },
+        body: JSON.stringify({
+          prompt: `${prompt}, high quality, professional, vibrant colors`,
+          modelId: "b24e16ff-06e3-43eb-8d33-4416c2d75876",
+          width: 1024,
+          height: 1024,
+          num_images: 1,
+          presetStyle: leonardoStyle,
+          guidance_scale: 7,
+          public: false
+        })
+      });
 
-        const genData = await genResponse.json();
-        const generationId = genData.sdGenerationJob?.generationId;
+      const genData = await genResponse.json();
+      const generationId = genData.sdGenerationJob?.generationId;
 
-        if (!generationId) throw new Error("Leonardo não retornou generation ID");
+      if (!generationId) throw new Error("Leonardo não retornou generation ID");
 
-        let imageUrl = null;
-        for (let i = 0; i < 10; i++) {
-          await new Promise(r => setTimeout(r, 3000));
+      let imageUrl = null;
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 3000));
 
-          const resultResponse = await fetch(
-            `https://cloud.leonardo.ai/api/rest/v1/generations/${generationId}`,
-            { headers: { "Authorization": `Bearer ${process.env.LEONARDO_API_KEY}` } }
-          );
+        const resultResponse = await fetch(
+          `https://cloud.leonardo.ai/api/rest/v1/generations/${generationId}`,
+          { headers: { "Authorization": `Bearer ${process.env.LEONARDO_API_KEY}` } }
+        );
 
-          const resultData = await resultResponse.json();
-          const images = resultData.generations_by_pk?.generated_images;
+        const resultData = await resultResponse.json();
+        const images = resultData.generations_by_pk?.generated_images;
 
-          if (images && images.length > 0) {
-            imageUrl = images[0].url;
-            break;
-          }
+        if (images && images.length > 0) {
+          imageUrl = images[0].url;
+          break;
         }
-
-        if (!imageUrl) throw new Error("Leonardo timeout");
-
-        console.log("✅ Leonardo AI gerou imagem");
-        return res.json({
-          success: true,
-          model_used: "leonardo_ai",
-          image_url: imageUrl
-        });
-
-      } catch (leonardoError) {
-        console.log("⚠️ Leonardo falhou, usando DALL-E:", leonardoError.message);
       }
+
+      if (!imageUrl) throw new Error("Leonardo timeout");
+
+      console.log("✅ Leonardo AI gerou imagem");
+      return res.json({
+        success: true,
+        model_used: "leonardo_ai",
+        image_url: imageUrl
+      });
+
+    } catch (leonardoError) {
+      console.log("🚨 Leonardo falhou:", leonardoError.message);
+      return res.status(500).json({
+        error: "Não foi possível gerar a imagem. Tente novamente.",
+        details: leonardoError.message
+      });
     }
-
-    // STEP 4 — DALL-E 3 (fallback final)
-    const stylePrompts = {
-      "realista": "photorealistic, high quality, professional photography",
-      "ilustracao": "digital illustration, flat design, colorful",
-      "digital": "3D render, cinema 4D, professional digital art",
-      "minimalista": "minimalist, clean, simple, modern design",
-      "cartoon": "cartoon style, fun, colorful, animated illustration"
-    };
-
-    const styleAdd = stylePrompts[style] || stylePrompts["digital"];
-    const fullPrompt = `${prompt}, ${styleAdd}, purple and cyan color palette, dark background, modern, high quality, 1080x1080`;
-
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: fullPrompt,
-        n: 1,
-        size: "1024x1024",
-        quality: "standard",
-        response_format: "url"
-      })
-    });
-
-    const data = await response.json();
-
-    if (!data.data?.[0]?.url) {
-      return res.status(500).json({ error: "Erro ao gerar imagem" });
-    }
-
-    console.log("✅ DALL-E 3 gerou imagem (fallback)");
-    return res.json({
-      success: true,
-      model_used: "dalle_3",
-      image_url: data.data[0].url
-    });
 
   } catch (error) {
     console.error("🚨 Erro smart-image:", error);
@@ -999,7 +958,7 @@ Responda apenas uma palavra: nano, leonardo ou dalle`
   }
 });
 
-// 🎨 GERAR IMAGEM DALL-E (endpoint original mantido)
+// 🎨 GERAR IMAGEM DALL-E (mantido para outros usos)
 app.post("/tools/generate-image", async (req, res) => {
   try {
     const { prompt, style } = req.body;
