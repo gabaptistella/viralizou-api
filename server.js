@@ -814,7 +814,7 @@ Apenas JSON válido.`
   }
 });
 
-// 🎨 SMART IMAGE ROUTER — Nano Banana 2 + Leonardo AI (sem DALL-E)
+// 🎨 SMART IMAGE ROUTER — Nano Banana 2 + Leonardo AI
 app.post("/tools/smart-image", async (req, res) => {
   try {
     const { prompt, style } = req.body;
@@ -913,6 +913,7 @@ Responda apenas: nano ou leonardo`
       });
 
       const genData = await genResponse.json();
+      console.log("🔍 Leonardo response:", JSON.stringify(genData));
       const generationId = genData.sdGenerationJob?.generationId;
 
       if (!generationId) throw new Error("Leonardo não retornou generation ID");
@@ -999,6 +1000,112 @@ app.post("/tools/generate-image", async (req, res) => {
       revised_prompt: data.data[0].revised_prompt
     });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🧠 HUMANIZAR TEXTO
+app.post("/tools/humanize", async (req, res) => {
+  try {
+    const { text, type, tone, language } = req.body;
+    if (!text) return res.status(400).json({ error: "Texto obrigatório" });
+
+    const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
+    const lang = langMap[language] || "português brasileiro";
+
+    const typeMap = {
+      "legenda": "legenda para Instagram",
+      "roteiro": "roteiro para Reel/TikTok",
+      "caption": "Instagram caption",
+      "bio": "bio para Instagram",
+      "dm": "mensagem direta no Instagram",
+      "comentario": "resposta de comentário",
+      "post": "post para redes sociais"
+    };
+
+    const toneMap = {
+      "casual": "casual, descontraído, como se fosse uma conversa entre amigos",
+      "inspiracional": "inspiracional mas autêntico, sem clichês",
+      "engraçado": "engraçado e leve, com humor natural",
+      "profissional": "profissional mas humano, sem ser corporativo",
+      "direto": "direto ao ponto, simples e claro"
+    };
+
+    const contentType = typeMap[type] || "texto para redes sociais";
+    const toneDesc = toneMap[tone] || toneMap["casual"];
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: `Você é especialista em reescrever textos para soarem completamente humanos e autênticos.
+
+Reescreva esse ${contentType} em ${lang} para soar 100% humano.
+
+Tom: ${toneDesc}
+
+REMOVER obrigatoriamente frases típicas de IA:
+"Mergulhe em", "No mundo de hoje", "É crucial que",
+"Não se esqueça de", "Lembre-se sempre", "Em suma",
+"Vale ressaltar", "Sendo assim", "Portanto",
+"É importante destacar", "Certamente", "Absolutamente",
+"Com certeza", "Incrível jornada", "Transformador",
+"Revolucionário", "Sem precedentes", "Game-changer"
+
+USAR linguagem natural:
+→ Frases curtas e diretas
+→ Palavras do dia a dia
+→ Contrações naturais (tô, tá, né, pra)
+→ Variações de ritmo naturais
+→ Imperfeições sutis
+
+MANTER:
+→ Mensagem principal
+→ Emojis existentes
+→ CTA se existir
+→ Tamanho aproximado
+
+NÃO ADICIONAR:
+→ Hashtags novas
+→ Informações extras
+→ Exageros
+
+Texto original:
+${text}
+
+Retorne JSON:
+{
+  "humanizado": "texto reescrito aqui",
+  "score_humanidade": 95,
+  "mudancas": ["o que foi mudado 1", "o que foi mudado 2", "o que foi mudado 3"]
+}
+Apenas JSON válido.`
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const clean = data.content[0].text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+
+    return res.json({
+      success: true,
+      original: text,
+      humanizado: result.humanizado,
+      score_humanidade: result.score_humanidade,
+      mudancas: result.mudancas
+    });
+
+  } catch (error) {
+    console.error("🚨 Erro humanize:", error);
     res.status(500).json({ error: error.message });
   }
 });
