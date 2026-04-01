@@ -528,9 +528,9 @@ app.post("/tools/generate-launch-kit", async (req, res) => {
 
     const planConfig = {
       "free": null,
-      "creator": { max_tokens: 1500, label: "Kit Básico (3 dias)" },
-      "business": { max_tokens: 2500, label: "Kit Completo (7 dias)" },
-      "agency": { max_tokens: 4000, label: "Kit Premium (14 dias)" }
+      "creator": { max_tokens: 800 },
+      "business": { max_tokens: 1200 },
+      "agency": { max_tokens: 2000 }
     };
 
     const userPlan = plan || "creator";
@@ -551,13 +551,13 @@ Apenas JSON válido.`,
 Produto: ${product}. Preço: ${price}. Público: ${audience}.
 Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
 Retorne JSON VÁLIDO:
-{"label":"Kit Completo (7 dias)","cronograma":[{"dia":7,"tipo":"aquecimento","conteudo":"..."},{"dia":5,"tipo":"prova_social","conteudo":"..."},{"dia":3,"tipo":"teaser","conteudo":"..."},{"dia":1,"tipo":"lancamento","conteudo":"..."},{"dia":0,"tipo":"ultimo_dia","conteudo":"..."}],"posts":[{"dia":7,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":3,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":1,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":0,"hook":"...","desenvolvimento":"...","cta":"..."}],"stories":[{"dia":7,"stories":["...","...","..."]},{"dia":3,"stories":["...","...","..."]},{"dia":1,"stories":["...","...","..."]},{"dia":0,"stories":["...","..."]}],"autodm":{"keyword":"...","mensagens":["msg1","msg2","msg3"]},"email":{"assunto":"...","corpo":"..."},"hashtags":["#h1","#h2","#h3","#h4","#h5"]}
+{"label":"Kit Completo (7 dias)","cronograma":[{"dia":7,"tipo":"aquecimento","conteudo":"..."},{"dia":5,"tipo":"prova_social","conteudo":"..."},{"dia":3,"tipo":"teaser","conteudo":"..."},{"dia":1,"tipo":"lancamento","conteudo":"..."},{"dia":0,"tipo":"ultimo_dia","conteudo":"..."}],"posts":[{"dia":7,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":3,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":1,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":0,"hook":"...","desenvolvimento":"...","cta":"..."}],"stories":[{"dia":7,"stories":["...","..."]},{"dia":3,"stories":["...","..."]},{"dia":1,"stories":["...","..."]},{"dia":0,"stories":["...","..."]}],"autodm":{"keyword":"...","mensagens":["msg1","msg2"]},"hashtags":["#h1","#h2","#h3"]}
 Apenas JSON válido.`,
       "agency": `Crie kit de lançamento PREMIUM em ${lang} para 14 dias.
 Produto: ${product}. Preço: ${price}. Público: ${audience}.
 Benefício: ${benefit}. Data: ${date}. Plataforma: ${platform}.
 Retorne JSON VÁLIDO:
-{"label":"Kit Premium (14 dias)","cronograma":[{"dia":14,"tipo":"pre_aquecimento","conteudo":"..."},{"dia":10,"tipo":"aquecimento","conteudo":"..."},{"dia":7,"tipo":"prova_social","conteudo":"..."},{"dia":5,"tipo":"teaser","conteudo":"..."},{"dia":3,"tipo":"urgencia","conteudo":"..."},{"dia":1,"tipo":"lancamento","conteudo":"..."},{"dia":0,"tipo":"ultimo_dia","conteudo":"..."}],"posts":[{"dia":14,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":10,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":7,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":5,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":3,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":1,"hook":"...","desenvolvimento":"...","cta":"..."},{"dia":0,"hook":"...","desenvolvimento":"...","cta":"..."}],"stories":[{"dia":14,"stories":["...","...","..."]},{"dia":10,"stories":["...","...","..."]},{"dia":7,"stories":["...","...","..."]},{"dia":5,"stories":["...","...","..."]},{"dia":3,"stories":["...","...","..."]},{"dia":1,"stories":["...","...","..."]},{"dia":0,"stories":["...","..."]}],"autodm":{"keyword":"...","mensagens":["msg1","msg2","msg3","msg4"]},"email":{"assunto":"...","corpo":"..."},"script_youtube":"...","roteiro_live":"...","hashtags":["#h1","#h2","#h3","#h4","#h5"]}
+{"label":"Kit Premium (14 dias)","cronograma":[{"dia":14,"tipo":"pre_aquecimento","conteudo":"..."},{"dia":7,"tipo":"aquecimento","conteudo":"..."},{"dia":3,"tipo":"teaser","conteudo":"..."},{"dia":1,"tipo":"lancamento","conteudo":"..."},{"dia":0,"tipo":"ultimo_dia","conteudo":"..."}],"posts":[{"dia":14,"hook":"...","cta":"..."},{"dia":7,"hook":"...","cta":"..."},{"dia":3,"hook":"...","cta":"..."},{"dia":1,"hook":"...","cta":"..."},{"dia":0,"hook":"...","cta":"..."}],"stories":[{"dia":14,"stories":["...","..."]},{"dia":7,"stories":["...","..."]},{"dia":3,"stories":["...","..."]},{"dia":1,"stories":["...","..."]},{"dia":0,"stories":["...","..."]}],"autodm":{"keyword":"...","mensagens":["msg1","msg2","msg3"]},"script_youtube":"...","hashtags":["#h1","#h2","#h3","#h4","#h5"]}
 Apenas JSON válido.`
     };
 
@@ -592,8 +592,8 @@ app.post("/tools/generate-youtube", async (req, res) => {
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1500,
-        messages: [{ role: "user", content: `Crie pacote YouTube completo em ${lang}. Tema: ${topic}. Nicho: ${niche}. Keyword: ${keyword}. Duração: ${duration}min. Retorne JSON: {"titulos":["t1","t2","t3","t4","t5"],"descricao":"...","tags":["tag1","tag2"],"hashtags":["#h1","#h2"],"thumbnail":{"texto_principal":"...","subtexto":"...","cor_sugerida":"...","prompt_imagem":"..."},"tela_final":"...","capitulos":[{"tempo":"0:00","titulo":"..."}]}. Apenas JSON.` }]
+        max_tokens: 800,
+        messages: [{ role: "user", content: `Crie pacote YouTube completo em ${lang}. Tema: ${topic}. Nicho: ${niche}. Keyword: ${keyword}. Duração: ${duration}min. Retorne JSON: {"titulos":["t1","t2","t3"],"descricao":"...","tags":["tag1","tag2"],"hashtags":["#h1","#h2"],"thumbnail":{"texto_principal":"...","subtexto":"...","cor_sugerida":"...","prompt_imagem":"..."},"tela_final":"...","capitulos":[{"tempo":"0:00","titulo":"..."}]}. Apenas JSON.` }]
       })
     });
 
@@ -644,7 +644,7 @@ app.post("/tools/generate-collab", async (req, res) => {
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1000,
+        max_tokens: 800,
         messages: [{ role: "user", content: `Crie estratégia de collab em ${lang}. Meu nicho: ${my_niche}. Meus seguidores: ${my_followers}. Parceiro: @${partner_username}. Objetivo: ${objective}. Retorne JSON: {"compatibilidade":{"score":85,"descricao":"..."},"pontos_positivos":["p1","p2","p3"],"formatos_sugeridos":["f1","f2","f3"],"roteiro":"...","dm_abordagem":"...","contrato_basico":"..."}. Apenas JSON.` }]
       })
     });
@@ -661,7 +661,7 @@ app.post("/tools/generate-collab", async (req, res) => {
 // 🎨 GERADOR DE CARROSSEL COM IA
 app.post("/tools/generate-carousel", async (req, res) => {
   try {
-    const { tema, niche, slides_count, style, font, language, formato, finalidade } = req.body;
+    const { tema, niche, slides_count, style, language, formato, finalidade, tone } = req.body;
     const langMap = { "pt": "português brasileiro", "en": "English", "es": "español" };
     const lang = langMap[language] || "português brasileiro";
 
@@ -680,8 +680,17 @@ app.post("/tools/generate-carousel", async (req, res) => {
       "paisagem": { width: 1080, height: 566 }
     };
 
+    const toneMap = {
+      "divertido": "divertido, criativo, engraçado e leve",
+      "educativo": "educativo, informativo e claro",
+      "viral": "viral, impactante e surpreendente",
+      "profissional": "profissional, sério e confiante",
+      "inspiracional": "inspiracional, motivacional e emocionante"
+    };
+
     const cores = styleMap[style] || styleMap["dark"];
     const size = sizeMap[formato] || sizeMap["quadrado"];
+    const toneDesc = toneMap[tone] || toneMap["divertido"];
 
     const finalidadePrompts = {
       "carrossel": "Slide 1: capa com hook forte. Slides intermediários: conteúdo em tópicos. Último slide: CTA.",
@@ -698,7 +707,34 @@ app.post("/tools/generate-carousel", async (req, res) => {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: `Crie ${finalidade} para Instagram em ${lang}.\nTema: ${tema}\nNicho: ${niche}\nSlides: ${slides_count}\nFormato: ${formato} (${size.width}x${size.height}px)\nEstrutura: ${estrutura}\nRegras: Títulos max 5 palavras. Max 3 bullet points por slide. Um emoji por slide. Sugestão de imagem em inglês por slide.\nRetorne JSON:\n{"slides":[{"numero":1,"titulo":"...","corpo":"...","emoji":"🔥","cor_fundo":"${cores.cor_fundo}","cor_texto":"${cores.cor_texto}","image_suggestion":"..."}],"legenda":"...","hashtags":["..."],"cta":"...","tamanho":"${size.width}x${size.height}","formato":"${formato}"}\nApenas JSON válido.` }]
+        messages: [{
+          role: "user",
+          content: `Crie ${finalidade} para Instagram em ${lang}.
+Tema (usar exatamente como o usuário descreveu): ${tema}
+Nicho: ${niche || "geral"}
+Slides: ${slides_count || 5}
+Formato: ${formato} (${size.width}x${size.height}px)
+Tom: ${toneDesc}
+Estrutura: ${estrutura}
+Regras: Títulos max 5 palavras. Max 3 bullet points por slide. Um emoji por slide. Sugestão de imagem em inglês detalhada por slide conforme o tom.
+Retorne JSON:
+{
+  "slides": [{
+    "numero": 1,
+    "titulo": "...",
+    "corpo": "...",
+    "emoji": "🔥",
+    "cor_fundo": "${cores.cor_fundo}",
+    "cor_texto": "${cores.cor_texto}",
+    "image_suggestion": "detailed image prompt in english matching the tone"
+  }],
+  "roteiro": "roteiro narrativo completo e criativo conforme o tom ${toneDesc} — como se fosse um script para gravar ou narrar",
+  "legenda": "legenda completa para Instagram com emojis",
+  "hashtags": ["#hashtag1", "#hashtag2"],
+  "cta": "call to action final"
+}
+Apenas JSON válido.`
+        }]
       })
     });
 
@@ -747,7 +783,7 @@ Tom: ${toneDesc}
 Número de slides: ${photos.length}
 Slide 1 = capa com hook forte. Último slide = CTA.
 Retorne JSON:
-{"slides":[{"numero":1,"titulo":"max 5 palavras","texto":"max 2 frases","emoji":"🔥","cor_texto":"#FFFFFF","cor_fundo_overlay":"rgba(0,0,0,0.5)"}],"legenda":"legenda completa com emojis","hashtags":["#hash1","#hash2"],"cta":"call to action"}
+{"slides":[{"numero":1,"titulo":"max 5 palavras","texto":"max 2 frases","emoji":"🔥","cor_texto":"#FFFFFF","cor_fundo_overlay":"rgba(0,0,0,0.5)"}],"roteiro":"roteiro narrativo completo","legenda":"legenda completa com emojis","hashtags":["#hash1","#hash2"],"cta":"call to action"}
 Apenas JSON válido.`
         }]
       })
@@ -767,6 +803,7 @@ Apenas JSON válido.`
       success: true,
       slides: result.slides,
       photos: photosBase64,
+      roteiro: result.roteiro,
       legenda: result.legenda,
       hashtags: result.hashtags,
       cta: result.cta,
@@ -863,7 +900,6 @@ Responda apenas uma palavra: nano, leonardo ou dalle`
 
         const leonardoStyle = styleMap[style] || "DYNAMIC";
 
-        // Criar geração
         const genResponse = await fetch("https://cloud.leonardo.ai/api/rest/v1/generations", {
           method: "POST",
           headers: {
@@ -887,7 +923,6 @@ Responda apenas uma palavra: nano, leonardo ou dalle`
 
         if (!generationId) throw new Error("Leonardo não retornou generation ID");
 
-        // Polling para aguardar resultado
         let imageUrl = null;
         for (let i = 0; i < 10; i++) {
           await new Promise(r => setTimeout(r, 3000));
@@ -1054,7 +1089,7 @@ app.post("/analytics/analyze-competitor", async (req, res) => {
       headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1500,
+        max_tokens: 1000,
         messages: [{ role: "user", content: `Analise concorrente do Instagram em ${lang}.\nMeu perfil: @${my_username} (${my_followers} seguidores)\nConcorrente: @${username}\n\nRetorne JSON:\n{"competitor":{"username":"${username}","score":71,"followers_estimate":"50k-100k","engagement_rate":2.8,"posts_per_week":4,"melhor_horario":"20h","niche":"Fitness","top_hashtags":["#fitness"],"sponsored_posts_estimate":3,"valor_publi_estimado":"R$500-2000"},"benchmarking":{"engajamento":{"eu":4.2,"concorrente":2.8,"vencedor":"eu"},"crescimento":{"eu":"+2.3k/mês","concorrente":"+1.1k/mês","vencedor":"eu"},"consistencia":{"eu":"3x/semana","concorrente":"4x/semana","vencedor":"concorrente"}},"analise_geral":"...","sugestoes_para_superar":["s1","s2","s3"],"pontos_fortes_concorrente":["p1","p2"],"oportunidades":["o1","o2"]}\nApenas JSON.` }]
       })
     });
